@@ -1,9 +1,7 @@
 // ============================================================
 // UKOPERASI — API Client (Axios-like using Fetch)
 // ============================================================
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:3000/api'
-  : '/api'; // Same-origin in production
+const API_BASE = `${window.location.protocol}//${window.location.hostname}/api`;
 
 const Auth = {
   getToken() { return localStorage.getItem('uk_token'); },
@@ -29,16 +27,16 @@ async function fetchAPI(endpoint, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
+  const data = await res.json().catch(() => ({}));
+
   if (res.status === 401) {
     Auth.removeToken();
-    // Only redirect if not already on login page to prevent loops
     if (!window.location.pathname.includes('/pages/login')) {
       window.location.href = '/pages/login.html';
     }
-    return;
+    throw new Error(data.message || 'Sesi telah berakhir, silakan login kembali.');
   }
 
-  const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
   return data;
 }

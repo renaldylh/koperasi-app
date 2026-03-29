@@ -206,10 +206,14 @@ document.addEventListener('alpine:init', () => {
       this.errorMsg = '';
       try {
         const res = await api.login(this.email, this.password);
-        Auth.setToken(res.data.token);
-        Auth.setUser(res.data.user);
-        Toast.success('Login berhasil!');
-        setTimeout(() => window.location.href = '/pages/dashboard.html', 500);
+        if (res && res.data) {
+          Auth.setToken(res.data.token);
+          Auth.setUser(res.data.user);
+          Toast.success('Login berhasil!');
+          setTimeout(() => window.location.href = '/pages/dashboard.html', 500);
+        } else {
+          throw new Error('Respon server tidak valid.');
+        }
       } catch (err) {
         this.errorMsg = err.message || 'Login gagal. Periksa kembali email dan password.';
       } finally {
