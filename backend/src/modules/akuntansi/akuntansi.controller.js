@@ -1,5 +1,6 @@
 const { sequelize, Rekening, JurnalHeader, JurnalDetail } = require('../../models');
 const { Op } = require('sequelize');
+const { randomUUID } = require('crypto');
 
 /** GET /api/akuntansi/rekening */
 async function listRekening(req, res) {

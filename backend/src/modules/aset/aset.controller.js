@@ -1,7 +1,8 @@
 const { sequelize, AsetTetap, Rekening } = require('../../models');
 const { createJurnal, validateBalance } = require('../../utils/jurnalEngine');
 const { logAudit } = require('../../middleware/auditLog');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
+const uuidv4 = randomUUID;
 const { Op } = require('sequelize');
 
 /** GET /api/aset */

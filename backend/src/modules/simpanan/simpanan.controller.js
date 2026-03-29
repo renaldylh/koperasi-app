@@ -1,7 +1,8 @@
 const { jurnalSetoranSimpanan, jurnalPenarikanSimpanan } = require('../../utils/jurnalEngine');
 const { logAudit } = require('../../middleware/auditLog');
 const { sendWAMessage, parseTemplate } = require('../../utils/wa');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
+const uuidv4 = randomUUID;
 
 /** GET /api/simpanan/:anggotaId — saldo per anggota */
 async function getSaldo(req, res) {

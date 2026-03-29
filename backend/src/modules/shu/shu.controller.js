@@ -1,7 +1,8 @@
 const { sequelize, ShuPeriode, ShuDistribusi, Anggota } = require('../../models');
 const { hitungSHU } = require('../../utils/shuCalculator');
 const { jurnalClosingSHU } = require('../../utils/jurnalEngine');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
+const uuidv4 = randomUUID;
 
 /** POST /api/shu/hitung */
 async function hitung(req, res) {

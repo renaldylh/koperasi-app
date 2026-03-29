@@ -1,6 +1,7 @@
 const { sequelize, Anggota, Simpanan, SimpananJenis, SimpananTransaksi, Pinjaman, PinjamanAngsuran, Tenant } = require('../../models');
 const { generateToken } = require('../../middleware/auth');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
+const uuidv4 = randomUUID;
 const { Op } = require('sequelize');
 
 /** POST /api/member/login — Login Khusus Anggota via NIK & No Anggota */

@@ -1,7 +1,8 @@
 const { Penjualan, PenjualanDetail, Produk, Anggota, JurnalHeader, JurnalDetail, sequelize } = require('../../models');
 const { asyncHandler } = require('../../middleware/errorHandler');
 const { logAudit } = require('../../middleware/auditLog');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
+const uuidv4 = randomUUID;
 
 /** GET /api/produk/penjualan */
 exports.list = asyncHandler(async (req, res) => {
