@@ -1,0 +1,86 @@
+/* ============================================================
+   THERMAL SLIP PRINT CSS (58mm / 80mm POS Printers)
+   ============================================================ */
+
+/* Hide print area on screen */
+#print-container {
+  display: none;
+}
+
+@media print {
+  @page {
+    /* 58mm thermal paper width, height auto */
+    margin: 0;
+    size: 58mm auto;
+  }
+
+  /* Hide the entire app UI */
+  body > *:not(#print-container) {
+    display: none !important;
+  }
+
+  /* Reset body colors/backgrounds for black & white thermal */
+  body {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #000 !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  #print-container {
+    display: block !important;
+    width: 100%;
+    padding: 2mm;
+    margin: 0;
+    box-sizing: border-box;
+    font-family: 'Courier New', Courier, monospace, sans-serif !important;
+    text-align: left;
+  }
+
+  .print-header {
+    text-align: center;
+    border-bottom: 1px dashed #000;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+  }
+
+  .print-logo-text {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 2px;
+  }
+
+  .print-sub {
+    font-size: 9px;
+  }
+
+  .print-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+
+  .print-row span:first-child {
+    max-width: 50%;
+  }
+
+  .print-row span:last-child {
+    font-weight: bold;
+    text-align: right;
+  }
+
+  .print-divider {
+    border-top: 1px dashed #000;
+    margin: 5px 0;
+  }
+
+  .print-footer {
+    text-align: center;
+    font-size: 9px;
+    margin-top: 15px;
+    margin-bottom: 10px;
+  }
+}

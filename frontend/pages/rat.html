@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RAT & SHU - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/modules/rat.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      <div><div class="sidebar-logo-text">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+      <div class="user-info">
+        <div class="name truncate w-24" x-text="user?.nama">User</div>
+        <div class="role uppercase" x-text="user?.role">Role</div>
+      </div>
+      <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="ratModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Tutup Buku & Pembagian SHU</h1>
+    </header>
+
+    <div class="page-content max-w-5xl mx-auto">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Rapat Anggota Tahunan (RAT)</h2>
+          <p class="page-subtitle mb-0">Hitung distribusi SHU anggota berdasarkan jasa modal & usaha, serta Tutup Buku Akhir Tahun.</p>
+        </div>
+      </div>
+
+      <!-- Action Panel -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+         <div class="card bg-gradient-to-br from-[var(--dark-2)] target-[rgba(16,185,129,0.05)] border border-emerald-500/20 shadow-lg">
+            <h3 class="font-bold text-lg mb-2 flex items-center gap-2"><i class="ri-calculator-line text-blue-600 font-semibold"></i> Hitung SHU Tahunan</h3>
+            <p class="text-sm text-muted mb-4">Kalkulasi Sisa Hasil Usaha periode tertentu, beserta alokasi dana cadangan, dana pengurus, dan proporsi per anggota.</p>
+            
+            <form @submit.prevent="hitungSHU" class="flex gap-2">
+               <select x-model="tahun" required class="form-control max-w-[120px]">
+                  <option value="2025">2025</option>
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+               </select>
+               <button type="submit" class="btn btn-primary" :disabled="loadingCalc">
+                  <span x-show="!loadingCalc">Mulai Perhitungan</span>
+                  <span x-show="loadingCalc"><i class="ri-loader-4-line animate-spin"></i></span>
+               </button>
+            </form>
+         </div>
+
+         <div class="card bg-gradient-to-br from-[var(--dark-2)] target-[rgba(59,130,246,0.05)] border border-blue-500/20 shadow-lg flex flex-col justify-center items-center text-center p-8">
+            <i class="ri-file-excel-2-line text-4xl text-blue-600 mb-2 drop-shadow"></i>
+            <h3 class="font-bold text-lg mb-1">Cetak Dokumen RAT SAK EP</h3>
+            <p class="text-xs text-muted mb-4">Export Buku Laporan Tahunan (Neraca, Laba/Rugi, CALK, Detail SHU) ke Excel Lengkap.</p>
+            <a :href="api.laporan.exportExcel(tahun)" class="btn btn-primary bg-blue-600 w-full justify-center" target="_blank">Unduh Laporan RAT <span x-text="tahun"></span></a>
+         </div>
+      </div>
+
+      <!-- Hasil Perhitungan / Buku SHU -->
+      <div x-show="shuResult" x-cloak class="fade-in">
+         <h3 class="font-bold text-xl mb-4 border-b border-slate-200 pb-2">Hasil Perhitungan SHU <span x-text="shuResult?.tahun"></span></h3>
+         
+         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+               <div class="text-xs text-muted mb-1">Total Laba Bersih / SHU</div>
+               <div class="text-xl font-bold font-mono text-blue-600 font-semibold" x-text="formatRp(shuResult?.total_shu)"></div>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+               <div class="text-xs text-muted mb-1">Porsi Jasa Modal (<span x-text="Number(shuResult?.persentase_jasa_modal)"></span>%)</div>
+               <div class="text-lg font-bold font-mono" x-text="formatRp((shuResult?.total_shu * shuResult?.persentase_jasa_modal)/100)"></div>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+               <div class="text-xs text-muted mb-1">Porsi Jasa Usaha (<span x-text="Number(shuResult?.persentase_jasa_usaha)"></span>%)</div>
+               <div class="text-lg font-bold font-mono" x-text="formatRp((shuResult?.total_shu * shuResult?.persentase_jasa_usaha)/100)"></div>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+               <div class="text-xs text-muted mb-1">Dana Cadangan (<span x-text="Number(shuResult?.persentase_dana_cadangan)"></span>%)</div>
+               <div class="text-lg font-bold font-mono text-amber-600" x-text="formatRp((shuResult?.total_shu * shuResult?.persentase_dana_cadangan)/100)"></div>
+            </div>
+         </div>
+
+         <div class="flex justify-between items-center mb-4">
+            <h4 class="font-bold text-blue-600">Rincian Hak SHU Anggota</h4>
+            
+            <button x-show="shuResult?.status === 'draft'" @click="tutupBuku()" class="btn btn-danger" :disabled="loadingClose">
+               <span x-show="!loadingClose"><i class="ri-lock-2-line"></i> Validasi & Tutup Buku</span>
+               <span x-show="loadingClose"><i class="ri-loader-4-line animate-spin"></i></span>
+            </button>
+            
+            <div x-show="shuResult?.status === 'final'" class="badge badge-green px-3 py-2">
+               <i class="ri-check-double-line"></i> SHU FINAL (Sudah Terjurnal)
+            </div>
+         </div>
+
+         <div class="card p-0">
+            <div class="table-wrap max-h-[500px] overflow-y-auto">
+               <table class="w-full text-sm">
+                  <thead class="sticky top-0 bg-dark-2 z-10 shadow">
+                     <tr>
+                        <th>Anggota</th>
+                        <th class="text-right">Jasa Modal</th>
+                        <th class="text-right">Jasa Usaha</th>
+                        <th class="text-right text-blue-600 font-semibold">Total Terima</th>
+                     </tr>
+                  </thead>
+                  <tbody>
+                     <template x-for="d in distribusi" :key="d.id">
+                        <tr class="hover:bg-[rgba(255,255,255,0.02)]">
+                           <td>
+                              <div class="font-bold" x-text="d.anggotum?.nama"></div>
+                              <div class="text-[10px] text-muted font-mono" x-text="d.anggotum?.no_anggota"></div>
+                           </td>
+                           <td class="text-right font-mono" x-text="formatRp(d.jasa_modal)"></td>
+                           <td class="text-right font-mono" x-text="formatRp(d.jasa_usaha)"></td>
+                           <td class="text-right font-mono font-bold text-blue-600 font-semibold bg-[rgba(37,99,235,0.05)]" x-text="formatRp(d.total_shu_diterima)"></td>
+                        </tr>
+                     </template>
+                  </tbody>
+               </table>
+            </div>
+         </div>
+         
+         <div class="mt-4 p-4 text-xs text-muted border border-slate-200 rounded-lg flex items-start gap-3">
+             <i class="ri-information-line text-lg text-blue-600"></i>
+             <div>
+                <strong class="text-slate-800 block mb-1">Mekanisme Tutup Buku / Closing Entry:</strong>
+                Saat tombol <span class="text-red-600">Tutup Buku</span> ditekan, sistem secara otomatis menerbitkan Jurnal Penutup SAK EP. Pendapatan dan Beban di-nol-kan ke akun Ikhtisar Laba Rugi. Kemudian, Jasa Anggota akan ditambahkan ke "Simpanan" mereka atau disiapkan di akun "Hutang SHU Anggota" yang siap ditarik/dibagikan.
+             </div>
+         </div>
+      </div>
+    </div>
+  </main>
+  <style>.fade-in { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }</style>
+</body>
+</html>

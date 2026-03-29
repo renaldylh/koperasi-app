@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Beban & Pendapatan - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/modules/transaksi.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="transaksiModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Beban & Pendapatan Lain</h1>
+    </header>
+
+    <div class="page-content">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Transaksi Operasional Koperasi</h2>
+          <p class="page-subtitle mb-0">Catat pendapatan di luar bunga dan beban biaya operasional (listrik, gaji, dll).</p>
+        </div>
+        <div class="flex gap-2">
+          <button @click="openKasirModal()" class="btn" :class="sesiKasir ? 'btn-danger' : 'btn-primary bg-blue-600'">
+             <i class="ri-store-2-line"></i> <span x-text="sesiKasir ? 'Tutup Shift Kasir' : 'Buka Shift Kasir'"></span>
+          </button>
+          <button @click="openPettyCash()" class="btn btn-secondary" :disabled="!sesiKasir"><i class="ri-magic-line text-amber-500"></i> Petty Cash</button>
+          <input type="text" x-model="search" @input.debounce.500ms="loadData(1)" class="topbar-search w-48" placeholder="Cari...">
+          <button @click="openModal('pemasukan')" class="btn btn-primary bg-blue-600 hover:bg-blue-700" :disabled="!sesiKasir"><i class="ri-arrow-down-line"></i> Pendapatan</button>
+          <button @click="openModal('pengeluaran')" class="btn btn-danger" :disabled="!sesiKasir"><i class="ri-arrow-up-line"></i> Beban</button>
+        </div>
+      </div>
+
+      <div x-show="!sesiKasir" class="bg-[rgba(239,68,68,0.1)] border border-red-500/20 text-red-700 p-4 rounded-lg mb-6 flex items-center gap-3">
+         <i class="ri-error-warning-fill text-2xl text-red-500"></i>
+         <div>
+            <strong class="block">Perhatian: Anda belum membuka Shift Kasir (Buka Toko).</strong>
+            <span class="text-sm">Untuk dapat mencatat transaksi (Pemasukan/Pengeluaran), silakan Buka Shift Kasir terlebih dahulu dan catat uang fisik di laci Anda saat ini.</span>
+         </div>
+      </div>
+
+      <div class="card p-0">
+        <div class="table-wrap">
+          <table class="w-full">
+             <thead>
+                <tr>
+                   <th>Waktu</th>
+                   <th>Jenis / Akun</th>
+                   <th>Keterangan</th>
+                   <th>Ref Jurnal</th>
+                   <th class="text-right">Nominal</th>
+                </tr>
+             </thead>
+             <tbody>
+                <tr x-show="loading"><td colspan="5" class="text-center p-8"><div class="spinner mx-auto"></div></td></tr>
+                <tr x-show="!loading && transaksi.length === 0"><td colspan="5" class="empty-state"><i class="ri-wallet-3-line big-icon"></i><div class="title">Belum ada transaksi operasional</div></td></tr>
+                
+                <template x-for="t in transaksi" :key="t.id">
+                   <tr>
+                      <td class="whitespace-nowrap" x-text="formatDate(t.tanggal)"></td>
+                      <td>
+                         <div class="font-bold flex items-center gap-2">
+                           <span x-show="t.jenis === 'pemasukan'" class="badge badge-green text-[10px] w-6 flex justify-center"><i class="ri-add-line"></i></span>
+                           <span x-show="t.jenis === 'pengeluaran'" class="badge badge-red text-[10px] w-6 flex justify-center"><i class="ri-subtract-line"></i></span>
+                           <span x-text="t.rekeningLawan?.nama"></span>
+                         </div>
+                         <div class="font-mono text-xs text-muted" x-text="t.rekeningLawan?.kode"></div>
+                      </td>
+                      <td class="text-sm max-w-sm" x-text="t.keterangan || '-'"></td>
+                      <td>
+                         <a :href="'/pages/akuntansi.html?tab=jurnal&search=' + t.jurnal_header_id" 
+                            class="font-mono text-xs text-blue-600 hover:underline" title="Lihat postingan Jurnal">
+                            <i class="ri-links-line"></i> <span x-text="t.jurnal_header_id ? 'Terkait' : '-'"></span>
+                         </a>
+                      </td>
+                      <td class="text-right font-mono font-bold" :class="t.jenis === 'pemasukan' ? 'text-blue-600 font-semibold' : 'text-red-600'" 
+                          x-text="(t.jenis === 'pemasukan' ? '+ ' : '- ') + formatRp(t.nominal)"></td>
+                      <td class="text-right">
+                          <button @click="whatsappReceipt(t)" class="text-emerald-600 hover:text-emerald-700 p-1" title="Kirim Slip WA">
+                             <i class="ri-whatsapp-line"></i>
+                          </button>
+                       </td>
+                   </tr>
+                </template>
+             </tbody>
+          </table>
+        </div>
+        
+        <div class="p-4 border-t border-slate-200 flex justify-between items-center" x-show="meta.totalPages > 1">
+          <div class="text-xs text-muted">Total: <span x-text="meta.total"></span> catatan</div>
+          <div class="pagination">
+            <button class="page-btn" :disabled="meta.page === 1" @click="loadData(meta.page - 1)"><i class="ri-arrow-left-s-line"></i></button>
+            <span class="text-xs px-2" x-text="`${meta.page} / ${meta.totalPages}`"></span>
+            <button class="page-btn" :disabled="meta.page === meta.totalPages" @click="loadData(meta.page + 1)"><i class="ri-arrow-right-s-line"></i></button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Modal Form -->
+    <div class="modal-overlay" x-show="showModal" style="display: none;">
+      <div class="modal" @click.away="showModal = false">
+        <h3 class="modal-title">
+           <span x-show="txTipe === 'pemasukan'" class="text-blue-600 font-semibold"><i class="ri-add-circle-line"></i> Catat Pendapatan Lain</span>
+           <span x-show="txTipe === 'pengeluaran'" class="text-red-600"><i class="ri-indeterminate-circle-line"></i> Catat Beban / Biaya Keluaran</span>
+        </h3>
+        <form @submit.prevent="submitForm">
+          
+          <div class="form-group">
+            <label class="form-label" x-text="txTipe === 'pemasukan' ? 'Akun Pendapatan' : 'Akun Beban'"></label>
+            <select x-model="form.rekening_id" required class="form-control">
+               <option value="">-- Pilih CoA / Buku Referensi --</option>
+               <template x-for="r in refRekening" :key="r.id">
+                 <option :value="r.id" x-text="`${r.kode} - ${r.nama}`"></option>
+               </template>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Tanggal Transaksi *</label>
+            <input type="date" x-model="form.tanggal" required class="form-control">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nominal (Rp) *</label>
+            <input type="number" x-model.number="form.nominal" required min="100" class="form-control font-mono font-bold" 
+                   :class="txTipe==='pemasukan' ? 'text-blue-600 font-semibold' : 'text-red-600'" placeholder="0">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Keterangan Tambahan / Invoice / Nota</label>
+            <input type="text" x-model="form.keterangan" required class="form-control" placeholder="Bayar Listrik PLN Bulan ...">
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showModal = false">Batal</button>
+            <button type="submit" class="btn btn-primary" :class="txTipe === 'pemasukan' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-500'" :disabled="saving">
+              <span x-show="!saving"><i class="ri-save-3-line"></i> Simpan & Jurnal SAK EP</span>
+              <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> Proses...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Buka / Tutup Kasir -->
+    <div class="modal-overlay" x-show="showKasirModal" style="display: none;">
+      <div class="modal" @click.away="showKasirModal = false">
+        <h3 class="modal-title text-blue-600">
+           <i class="ri-store-2-line"></i> <span x-text="sesiKasir ? 'Rekonsiliasi & Tutup Kasir (End of Day)' : 'Buka Shift Kasir Baru'"></span>
+        </h3>
+        <form @submit.prevent="submitKasir">
+          
+          <div class="p-4 mb-4 text-sm bg-[rgba(59,130,246,0.1)] text-blue-700 rounded-lg" x-show="!sesiKasir">
+             Masukkan jumlah uang tunai fisik yang ada di laci kasir saat ini (sebelum memulai hari).
+          </div>
+          
+          <div class="p-4 mb-4 text-sm bg-[rgba(239,68,68,0.1)] text-red-700 rounded-lg" x-show="sesiKasir">
+             Hitung seluruh uang tunai fisik yang ada di laci Anda sekarang. Sistem akan mencatat rekonsiliasi.
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" x-text="sesiKasir ? 'Total Uang Fisik Saat Tutup (Rp)' : 'Total Uang Fisik Saat Buka (Rp)'"></label>
+            <input type="number" x-model.number="kasirForm.nominal" required min="0" class="form-control font-mono font-bold text-lg" placeholder="0">
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showKasirModal = false">Batal</button>
+            <button type="submit" class="btn btn-primary" :class="sesiKasir ? 'bg-red-600' : 'bg-blue-600'" :disabled="saving">
+              <span x-show="!saving" x-text="sesiKasir ? 'Tutup Kasir' : 'Mulai Shift (Buka Kasir)'"></span>
+              <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> Proses...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL PETTY CASH (WIZARD) -->
+    <div class="modal-overlay" x-show="showPettyCashModal" style="display: none;">
+       <div class="modal" @click.away="showPettyCashModal = false">
+          <h3 class="modal-title text-amber-600"><i class="ri-magic-line"></i> Petty Cash Wizard</h3>
+          <p class="modal-sub text-xs">Catat pengeluaran rutin kecil dengan cepat tanpa ribet pilih buku kas.</p>
+          
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 my-4">
+             <template x-for="cat in pettyCashCategories" :key="cat.name">
+                <button type="button" @click="selectPettyCash(cat)" 
+                        class="flex flex-col items-center p-3 rounded-lg border-2 transition-all"
+                        :class="form.keterangan === cat.name ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-100 bg-white hover:border-slate-200'">
+                   <i class="text-2xl mb-1" :class="cat.icon"></i>
+                   <span class="text-[10px] font-bold text-center" x-text="cat.name"></span>
+                </button>
+             </template>
+          </div>
+
+          <form @submit.prevent="submitForm">
+             <div class="form-group">
+                <label class="form-label">Nominal Pengeluaran (Rp) *</label>
+                <input type="number" x-model.number="form.nominal" required min="100" 
+                       class="form-control font-mono font-bold text-lg text-red-600" placeholder="0">
+             </div>
+             
+             <div class="form-group mt-2">
+                <label class="form-label">Catatan Tambahan (Opsional)</label>
+                <input type="text" x-model="form.keterangan" class="form-control" placeholder="..." required>
+             </div>
+
+             <div class="modal-footer mt-4">
+                <button type="button" class="btn btn-secondary" @click="showPettyCashModal = false">Batal</button>
+                <button type="submit" class="btn btn-primary bg-amber-600 hover:bg-amber-700" :disabled="saving || !form.rekening_id">
+                   <span x-show="!saving">Simpan Petty Cash</span>
+                   <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> menyimpan...</span>
+                </button>
+             </div>
+          </form>
+       </div>
+    </div>
+
+  </main>
+</body>
+</html>

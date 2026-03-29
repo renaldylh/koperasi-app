@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Laporan Keuangan SAK EP - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/modules/laporan.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="laporanModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Laporan Keuangan SAK EP</h1>
+    </header>
+
+    <div class="page-content">
+      <!-- Kop Surat (Print Only) -->
+      <div class="border-b-4 border-double border-slate-900 pb-4 mb-6 hidden print:flex items-start gap-6">
+        <img :src="settings.logo_url || '/assets/img/logo-koperasi.png'" alt="Logo" class="w-24 h-24 object-contain">
+        <div class="flex-1 text-center">
+          <h1 class="text-2xl font-black uppercase tracking-widest text-slate-900 border-b border-slate-300 pb-1 mb-1" x-text="settings.nama_koperasi">Ukoperasi</h1>
+          <p class="text-sm font-bold uppercase text-slate-700 tracking-wider">Badan Hukum No: <span x-text="settings.no_badan_hukum || 'AHU-12345.AH.01.26.Tahun 2025'"></span></p>
+          <p class="text-xs text-slate-600 mt-1" x-text="settings.alamat_kantor || 'Alamat Institusi'"></p>
+          <p class="text-xs text-blue-600 font-semibold italic mt-1">"Professional Financial & Institutional Management System"</p>
+        </div>
+      </div>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Generate Laporan RAT</h2>
+          <p class="page-subtitle mb-0">Laporan realtime berdasarkan posting jurnal. Ekspor ke Excel untuk Lampiran RAT.</p>
+        </div>
+        <div class="flex gap-2">
+          <select x-model="tahun" @change="loadAll()" class="form-control w-32 bg-dark-2">
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+          <button onclick="window.print()" class="btn btn-secondary"><i class="ri-printer-line"></i> Cetak PDF</button>
+          <a :href="api.laporan.exportExcel(tahun)" class="btn btn-primary bg-blue-600 hover:bg-blue-700" target="_blank"><i class="ri-file-excel-2-line"></i> Export Excel</a>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-2 mb-6 border-b border-slate-200 pb-1 overflow-x-auto hide-scrollbar">
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap" :class="tab === 'neraca' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'neraca'">Neraca</button>
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap" :class="tab === 'labarugi' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'labarugi'">Laba Rugi (SHU)</button>
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap" :class="tab === 'aruskas' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'aruskas'">Arus Kas</button>
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap" :class="tab === 'ekuitas' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'ekuitas'">Perubahan Ekuitas</button>
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap" :class="tab === 'calk' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'calk'">CALK</button>
+      </div>
+
+      <!-- NERACA -->
+      <div x-show="tab === 'neraca'" x-cloak class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- ASET -->
+        <div class="card p-0 h-fit">
+          <div class="p-4 border-b border-slate-200 bg-white">
+            <h3 class="font-bold text-blue-600 font-semibold uppercase tracking-widest text-sm">Aset</h3>
+          </div>
+          <div class="table-wrap">
+            <table class="w-full">
+               <tbody>
+                  <tr x-show="loadingNeraca"><td colspan="2" class="text-center py-8"><div class="spinner mx-auto"></div></td></tr>
+                  <template x-for="r in neraca.aset" :key="r.kode">
+                     <tr>
+                        <td>
+                           <div class="font-mono text-xs text-muted" x-text="r.kode"></div>
+                           <div class="font-semibold" x-text="r.nama"></div>
+                        </td>
+                        <td class="text-right font-mono font-bold" x-text="formatRp(r.saldo)"></td>
+                     </tr>
+                  </template>
+               </tbody>
+               <tfoot>
+                  <tr class="bg-[rgba(16,185,129,0.1)] border-t-2 border-blue-600/30">
+                     <td class="font-bold p-4">TOTAL ASET</td>
+                     <td class="text-right font-bold text-lg text-blue-600 font-semibold font-mono p-4" x-text="formatRp(neraca.total_aset)"></td>
+                  </tr>
+               </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <!-- KEWAJIBAN & EKUITAS -->
+        <div class="flex flex-col gap-6 h-fit">
+          <div class="card p-0">
+            <div class="p-4 border-b border-slate-200 bg-white">
+              <h3 class="font-bold text-amber-600 uppercase tracking-widest text-sm">Liabilitas (Kewajiban)</h3>
+            </div>
+            <div class="table-wrap">
+              <table class="w-full">
+                 <tbody>
+                    <tr x-show="loadingNeraca"><td colspan="2" class="text-center py-8"><div class="spinner mx-auto"></div></td></tr>
+                    <template x-for="r in neraca.kewajiban" :key="r.kode">
+                       <tr>
+                          <td>
+                             <div class="font-mono text-xs text-muted" x-text="r.kode"></div>
+                             <div class="font-semibold" x-text="r.nama"></div>
+                          </td>
+                          <td class="text-right font-mono font-bold" x-text="formatRp(Math.abs(r.saldo))"></td>
+                       </tr>
+                    </template>
+                 </tbody>
+                 <tfoot>
+                    <tr class="bg-[rgba(245,158,11,0.1)] border-t border-amber-500/30">
+                       <td class="font-bold px-4 py-3">Total Kewajiban</td>
+                       <td class="text-right font-bold text-amber-600 font-mono px-4 py-3" x-text="formatRp(Math.abs(neraca.total_kewajiban))"></td>
+                    </tr>
+                 </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="card p-0">
+            <div class="p-4 border-b border-slate-200 bg-white">
+              <h3 class="font-bold text-blue-600 uppercase tracking-widest text-sm">Ekuitas & SHU</h3>
+            </div>
+            <div class="table-wrap">
+              <table class="w-full">
+                 <tbody>
+                    <tr x-show="loadingNeraca"><td colspan="2" class="text-center py-8"><div class="spinner mx-auto"></div></td></tr>
+                    <template x-for="r in neraca.ekuitas" :key="r.kode">
+                       <tr>
+                          <td>
+                             <div class="font-mono text-xs text-muted" x-text="r.kode"></div>
+                             <div class="font-semibold" x-text="r.nama"></div>
+                          </td>
+                          <td class="text-right font-mono font-bold" x-text="formatRp(Math.abs(r.saldo))"></td>
+                       </tr>
+                    </template>
+                 </tbody>
+                 <tfoot class="border-t-2 border-slate-200">
+                    <tr class="bg-[rgba(59,130,246,0.1)] border-t border-blue-500/30">
+                       <td class="font-bold px-4 py-3">Total Ekuitas</td>
+                       <td class="text-right font-bold text-blue-600 font-mono px-4 py-3" x-text="formatRp(Math.abs(neraca.total_ekuitas))"></td>
+                    </tr>
+                    <tr class="bg-[rgba(16,185,129,0.15)] border-t border-blue-600/50">
+                       <td class="font-bold p-4">TOTAL LIABILITAS & EKUITAS</td>
+                       <td class="text-right font-bold text-lg text-blue-600 font-semibold font-mono p-4" x-text="formatRp(Math.abs(neraca.total_kewajiban_ekuitas))"></td>
+                    </tr>
+                 </tfoot>
+              </table>
+            </div>
+            <!-- Balance Check indicator -->
+            <div class="p-3 text-center text-xs font-bold font-mono border-t border-[rgba(0,0,0,0.3)]"
+                 :class="(neraca.total_aset - Math.abs(neraca.total_kewajiban_ekuitas)) === 0 ? 'bg-emerald-900 text-blue-600 font-semibold' : 'bg-red-900 text-red-600'">
+               BALANCE STATUS: <span x-text="(neraca.total_aset - Math.abs(neraca.total_kewajiban_ekuitas)) === 0 ? 'SEIMBANG ✓' : 'TIDAK SEIMBANG ✗'"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LABA RUGI / SHU -->
+      <div x-show="tab === 'labarugi'" x-cloak class="card max-w-4xl mx-auto p-0 border border-slate-200">
+         <div class="p-6 text-center border-b border-slate-200">
+            <h3 class="text-xl font-bold uppercase">Laporan Sisa Hasil Usaha</h3>
+            <p class="text-sm text-muted" x-text="`Periode 1 Jan - 31 Des ${tahun}`"></p>
+         </div>
+
+         <div x-show="loadingLR" class="py-20 text-center"><div class="spinner mx-auto"></div></div>
+
+         <div class="px-6 py-4" x-show="!loadingLR">
+            <!-- PENDAPATAN -->
+            <h4 class="font-bold text-blue-600 mb-3 uppercase text-sm border-b border-slate-200 pb-2"><i class="ri-arrow-right-down-line mr-1"></i> Pendapatan Operasional</h4>
+            <table class="w-full mb-6">
+               <template x-for="r in labaRugi.pendapatan" :key="r.kode">
+                  <tr>
+                     <td class="py-2 pl-4"><span class="font-mono text-xs text-muted mr-3" x-text="r.kode"></span><span x-text="r.nama"></span></td>
+                     <td class="py-2 text-right font-mono" x-text="formatRp(Math.abs(r.saldo))"></td>
+                  </tr>
+               </template>
+               <tr class="font-bold border-t border-slate-200">
+                  <td class="py-3 pl-4">Total Pendapatan</td>
+                  <td class="py-3 text-right font-mono text-blue-600" x-text="formatRp(Math.abs(labaRugi.total_pendapatan))"></td>
+               </tr>
+            </table>
+
+            <!-- BEBAN -->
+            <h4 class="font-bold text-red-600 mb-3 uppercase text-sm border-b border-slate-200 pb-2"><i class="ri-arrow-right-up-line mr-1"></i> Beban Operasional</h4>
+            <table class="w-full mb-6">
+               <template x-for="r in labaRugi.beban" :key="r.kode">
+                  <tr>
+                     <td class="py-2 pl-4"><span class="font-mono text-xs text-muted mr-3" x-text="r.kode"></span><span x-text="r.nama"></span></td>
+                     <td class="py-2 text-right font-mono text-red-600" x-text="'('+formatRp(r.saldo)+')'"></td>
+                  </tr>
+               </template>
+               <tr class="font-bold border-t border-slate-200">
+                  <td class="py-3 pl-4">Total Beban Operasional</td>
+                  <td class="py-3 text-right font-mono text-red-600" x-text="'('+formatRp(labaRugi.total_beban)+')'"></td>
+               </tr>
+            </table>
+
+            <!-- SHU BERSIH -->
+            <div class="mt-6 p-4 rounded-xl border border-blue-600/30 bg-gradient-to-r from-[rgba(16,185,129,0.1)] to-transparent flex justify-between items-center">
+               <div>
+                  <h3 class="text-xl font-bold text-slate-800">Sisa Hasil Usaha (SHU) Berjalan</h3>
+                  <p class="text-xs text-blue-600 font-semibold tracking-wide mt-1">SEBELUM DISTRIBUSI & PAJAK</p>
+               </div>
+               <div class="text-3xl font-black font-mono text-blue-600 font-semibold text-right" x-text="formatRp(labaRugi.shu)"></div>
+            </div>div>
+         </div>
+      </div>
+
+      <!-- ARUS KAS -->
+      <div x-show="tab === 'aruskas'" x-cloak class="card max-w-4xl mx-auto p-0 border border-slate-200">
+         <div class="p-6 text-center border-b border-slate-200">
+            <h3 class="text-xl font-bold uppercase">Laporan Arus Kas (Cash Flow)</h3>
+            <p class="text-sm text-muted" x-text="`Periode 1 Jan - 31 Des ${tahun}`"></p>
+         </div>
+         <div x-show="loadingLR" class="py-20 text-center"><div class="spinner mx-auto"></div></div>
+         <div class="px-6 py-4" x-show="!loadingLR">
+            <template x-for="category in [{k: 'operasi', n: 'Aktivitas Operasi'}, {k: 'investasi', n: 'Aktivitas Investasi'}, {k: 'pendanaan', n: 'Aktivitas Pendanaan'}]" :key="category.k">
+               <div class="mb-6">
+                  <h4 class="font-bold text-blue-600 font-semibold mb-3 uppercase text-sm border-b border-slate-200 pb-2" x-text="category.n"></h4>
+                  <table class="w-full">
+                     <tr>
+                        <td class="py-2 pl-4">Penerimaan (Masuk)</td>
+                        <td class="py-2 text-right font-mono text-blue-600" x-text="formatRp(arusKas[category.k]?.masuk || 0)"></td>
+                     </tr>
+                     <tr>
+                        <td class="py-2 pl-4">Pengeluaran (Keluar)</td>
+                        <td class="py-2 text-right font-mono text-red-600" x-text="'('+formatRp(arusKas[category.k]?.keluar || 0)+')'"></td>
+                     </tr>
+                     <tr class="font-bold border-t border-slate-200">
+                        <td class="py-3 pl-4">Kas Bersih</td>
+                        <td class="py-3 text-right font-mono" :class="(arusKas[category.k]?.kas_bersih || 0) < 0 ? 'text-red-600' : 'text-blue-600 font-semibold'" x-text="formatRp(arusKas[category.k]?.kas_bersih || 0)"></td>
+                     </tr>
+                  </table>
+               </div>
+            </template>
+            <div class="mt-6 p-4 rounded-xl border border-blue-500/30 bg-[rgba(59,130,246,0.1)] flex justify-between items-center">
+               <h3 class="text-xl font-bold text-slate-800">Kenaikan / Penurunan Kas</h3>
+               <div class="text-2xl font-black font-mono text-blue-600 text-right" x-text="formatRp(arusKas.kenaikan_penurunan_kas || 0)"></div>
+            </div>
+         </div>
+      </div>
+
+      <!-- PERUBAHAN EKUITAS -->
+      <div x-show="tab === 'ekuitas'" x-cloak class="card max-w-4xl mx-auto p-0 border border-slate-200">
+         <div class="p-6 text-center border-b border-slate-200">
+            <h3 class="text-xl font-bold uppercase">Laporan Perubahan Ekuitas</h3>
+            <p class="text-sm text-muted" x-text="`Periode 1 Jan - 31 Des ${tahun}`"></p>
+         </div>
+         <div x-show="loadingLR" class="py-20 text-center"><div class="spinner mx-auto"></div></div>
+         <div class="px-6 py-4" x-show="!loadingLR">
+            <div class="table-wrap mb-6">
+               <table class="w-full">
+                  <thead>
+                     <tr class="bg-white text-left">
+                        <th class="p-4" colspan="2">Komponen Ekuitas</th>
+                     </tr>
+                  </thead>
+                  <tbody>
+                     <template x-for="r in ekuitas.items" :key="r.kode">
+                        <tr class="border-b border-slate-200">
+                           <td class="p-4">
+                              <div class="font-mono text-xs text-muted" x-text="r.kode"></div>
+                              <div class="font-semibold text-blue-600" x-text="r.nama"></div>
+                           </td>
+                           <td class="p-4 text-right font-mono font-bold text-lg" x-text="formatRp(r.saldo_akhir)"></td>
+                        </tr>
+                     </template>
+                  </tbody>
+                  <tfoot>
+                     <tr class="bg-[rgba(16,185,129,0.1)] border-t-2 border-blue-600/30">
+                        <td class="font-bold p-4 text-lg">TOTAL EKUITAS AKHIR</td>
+                        <td class="text-right font-bold text-2xl text-blue-600 font-semibold font-mono p-4" x-text="formatRp(ekuitas.total)"></td>
+                     </tr>
+                  </tfoot>
+               </table>
+            </div>
+         </div>
+      </div>
+
+      <!-- CALK -->
+      <div x-show="tab === 'calk'" x-cloak class="card max-w-4xl mx-auto border border-slate-200">
+         <div class="text-center mb-8 border-b border-slate-200 pb-6">
+            <h3 class="text-2xl font-bold uppercase tracking-wide">Catatan Atas Laporan Keuangan (CALK)</h3>
+            <p class="text-sm text-muted mt-2" x-text="`Tahun Buku ${tahun}`"></p>
+         </div>
+         <div x-show="loadingLR" class="py-20 text-center"><div class="spinner mx-auto"></div></div>
+         <div x-show="!loadingLR" class="prose prose-invert prose-emerald max-w-none text-slate-800 text-sm md:text-base leading-relaxed">
+            <h4 class="text-blue-600 font-semibold font-bold mb-4 uppercase">1. Entitas & Informasi Umum</h4>
+            <p class="mb-4">Koperasi berbadan hukum yang berkedudukan di basis data sistem ini (SaaS-Tenant ID: Terlampir di log audit) melakukan kegiatan usaha simpan pinjam (Microfinance) yang melayani anggotanya secara eksklusif maupun lintas cabang sesuai AD/ART.</p>
+
+            <h4 class="text-blue-600 font-semibold font-bold mb-4 uppercase">2. Kebijakan Akuntansi Penting</h4>
+            <ul class="space-y-3 mb-8">
+               <template x-for="item in calkText" :key="item">
+                  <li class="flex items-start gap-3">
+                     <i class="ri-checkbox-circle-fill text-blue-600 mt-1"></i>
+                     <span x-text="item"></span>
+                  </li>
+               </template>
+            </ul>
+
+            <h4 class="text-blue-600 font-semibold font-bold mb-4 uppercase">3. Ringkasan Pos Neraca & Laba Rugi (<span x-text="tahun"></span>)</h4>
+            <p class="mb-4">Secara garis besar total Aset ditutup pada angka <b class="font-mono text-blue-600" x-text="formatRp(neraca.total_aset)"></b>. Di mana SHU bersih operasional (sebelum pajak dan distribusi) tercatat sebesar <b class="font-mono text-blue-600" x-text="formatRp(labaRugi.shu)"></b>.</p>
+         </div>
+      </div>
+
+      <!-- Signature Section (Print Only) -->
+      <div class="mt-12 hidden print:grid grid-cols-2 gap-20 text-center">
+         <div class="flex flex-col items-center">
+            <p class="text-sm font-semibold mb-20">Mengetahui,<br>Ketua Koperasi</p>
+            <div class="border-b-2 border-slate-900 w-48 font-bold uppercase text-slate-900">Bp. H. Muhammad, S.E.</div>
+            <p class="text-xs text-muted mt-1">Ketua Umum</p>
+         </div>
+         <div class="flex flex-col items-center">
+            <p class="text-sm font-semibold mb-20 text-slate-800">Dicetak Pada: <span x-text="new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})"></span><br>Bendahara</p>
+            <div class="border-b-2 border-slate-900 w-48 font-bold uppercase text-slate-900" x-text="user?.nama"></div>
+            <p class="text-xs text-muted mt-1">NIP: 198502022025012002</p>
+         </div>
+      </div>
+
+    </div>
+  </main>
+  <style>.hide-scrollbar::-webkit-scrollbar { display: none; }</style>
+</body>
+</html>

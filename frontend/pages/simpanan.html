@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Simpanan - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/components/ExcelEditor.js"></script>
+  <script src="/assets/js/modules/simpanan.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="simpananModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Buku Simpanan (Ekuitas Koperasi)</h1>
+    </header>
+
+    <div class="page-content">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Rekap Simpanan Anggota</h2>
+          <p class="page-subtitle mb-0">Total simpanan pokok, wajib, dan sukarela sesuai SAK EP.</p>
+        </div>
+        <div class="flex gap-3">
+          <input type="text" x-model="search" @input.debounce.500ms="loadData()" class="topbar-search" placeholder="Cari nama anggota..." x-show="!excelMode">
+          <button @click="toggleExcelMode()" class="btn" :class="excelMode ? 'btn-danger' : 'btn-success'" x-text="excelMode ? 'Keluar Excel' : 'Excel Bulk Mode'"></button>
+        </div>
+      </div>
+
+      <!-- Excel Mode View -->
+      <div x-show="excelMode" class="fade-in" style="display: none;">
+         <div class="card p-0 overflow-hidden mb-4 border-emerald-500/30">
+            <div class="bg-emerald-600 text-white px-4 py-2 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <span class="font-black tracking-tighter uppercase text-xs">Excel Bulk Setoran</span>
+                    <div class="h-4 w-px bg-white/20"></div>
+                    <span class="text-[10px] opacity-80">Gunakan Shortcut Ctrl+V untuk Paste dari Excel</span>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="saveBulk()" class="btn btn-sm bg-white text-emerald-700 font-bold px-4 border-none hover:bg-emerald-50" :disabled="saving">
+                        <span x-show="!saving">Simpan Masal &rarr;</span>
+                        <span x-show="saving">Proses...</span>
+                    </button>
+                </div>
+            </div>
+            <div class="table-wrap max-h-[70vh] relative">
+               <table class="excel-v2">
+                  <thead>
+                     <tr>
+                        <th class="row-idx">#</th>
+                        <th>No Anggota</th>
+                        <th>Kategori</th>
+                        <th>Keterangan</th>
+                        <th class="text-right">Nominal</th>
+                     </tr>
+                  </thead>
+                  <tbody>
+                     <template x-for="(row, i) in excelRows" :key="i">
+                        <tr>
+                           <td class="row-idx" x-text="i+1"></td>
+                           <td><input type="text" x-model="row.no_anggota" class="cell-input" placeholder="AGT-001" @paste="handlePaste($event, i)"></td>
+                           <td>
+                               <select x-model="row.jenis" class="cell-input">
+                                   <option value="wajib">Wajib</option>
+                                   <option value="pokok">Pokok</option>
+                                   <option value="sukarela">Sukarela</option>
+                               </select>
+                           </td>
+                           <td><input type="text" x-model="row.keterangan" class="cell-input" placeholder="..."></td>
+                           <td><input type="text" x-model="row.nominal" @input="evaluateCell(row, 'nominal', $event.target.value)" class="cell-input text-right font-mono" placeholder="0"></td>
+                        </tr>
+                     </template>
+                  </tbody>
+               </table>
+            </div>
+            <div class="p-2 bg-slate-50 border-t flex gap-2">
+                <button @click="addExcelRow()" class="btn btn-secondary btn-sm"><i class="ri-add-line"></i> Tambah Baris</button>
+            </div>
+         </div>
+      </div>
+
+      <!-- Detail Anggota View (Toggleable) -->
+      <template x-if="selectedAnggota">
+        <div class="mb-6 fade-in">
+          <div class="card bg-gradient-to-r from-[rgba(16,185,129,0.1)] to-[rgba(5,150,105,0.05)] border-emerald-500/20">
+            <div class="flex flex-col md:flex-row justify-between gap-4 border-b border-emerald-500/20 pb-4 mb-4">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center text-xl font-bold"><i class="ri-user-line"></i></div>
+                <div>
+                  <h3 class="text-lg font-bold text-blue-600 font-semibold" x-text="selectedAnggota.nama"></h3>
+                  <p class="text-sm text-muted">No: <span x-text="selectedAnggota.no_anggota"></span> | NIK: <span x-text="selectedAnggota.nik"></span></p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button @click="openModal('setoran')" class="btn btn-primary bg-blue-600 hover:bg-blue-700"><i class="ri-arrow-down-line"></i> Setoran</button>
+                <button @click="openModal('penarikan')" class="btn btn-danger"><i class="ri-arrow-up-line"></i> Penarikan</button>
+                <button @click="closeDetail()" class="btn btn-secondary btn-icon" title="Tutup"><i class="ri-close-line"></i></button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <template x-for="saldo in saldoDetail" :key="saldo.jenis">
+                <div class="bg-white p-3 rounded-lg border border-slate-200">
+                  <div class="text-xs text-slate-600 mb-1" x-text="'Simpanan ' + saldo.jenis"></div>
+                  <div class="text-lg font-bold" x-text="formatRp(saldo.saldo)"></div>
+                </div>
+              </template>
+            </div>
+
+            <h4 class="text-sm font-semibold mb-2 mt-4 text-blue-600 font-semibold border-b border-emerald-400/20 pb-1">Riwayat Transaksi Buku Tambahan</h4>
+            <div class="table-wrap max-h-64 overflow-y-auto">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>Jurnal</th>
+                    <th>Jenis</th>
+                    <th>Tipe</th>
+                    <th class="text-right">Nominal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr x-show="loadingTx"><td colspan="5" class="text-center py-4"><div class="spinner mx-auto"></div></td></tr>
+                  <tr x-show="!loadingTx && riwayatTx.length === 0"><td colspan="5" class="text-center py-4 text-muted text-xs">Belum ada transaksi simpanan</td></tr>
+                  <template x-for="tx in riwayatTx" :key="tx.id">
+                    <tr>
+                      <td x-text="formatDate(tx.tanggal)"></td>
+                      <td class="font-mono text-xs text-muted" x-text="tx.no_jurnal || '-'"></td>
+                      <td x-text="tx.jenis_simpanan"></td>
+                      <td><span class="badge" :class="tx.tipe === 'setoran' ? 'badge-blue' : 'badge-amber'" x-text="tx.tipe.toUpperCase()"></span></td>
+                      <td class="text-right font-bold" :class="tx.tipe === 'setoran' ? 'currency-green' : 'currency-red'" x-text="(tx.tipe === 'setoran' ? '+ ' : '- ') + formatRp(tx.nominal)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Rekap Semua Anggota -->
+      <div class="card p-0" x-show="!selectedAnggota">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>No Anggota</th>
+                <th>Nama Lengkap</th>
+                <th class="text-right">S. Pokok</th>
+                <th class="text-right">S. Wajib</th>
+                <th class="text-right">S. Sukarela</th>
+                <th class="text-right">Total Simpanan</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr x-show="loading"><td colspan="7" class="text-center p-8"><div class="spinner mx-auto"></div></td></tr>
+              <tr x-show="!loading && rekap.length === 0"><td colspan="7" class="empty-state"><i class="ri-folder-info-line big-icon"></i><div class="title">Buku rekap simpanan kosong</div></td></tr>
+              
+              <template x-for="r in rekap" :key="r.anggota_id">
+                <tr>
+                  <td class="font-mono text-sm text-blue-600 font-semibold" x-text="r.no_anggota"></td>
+                  <td class="font-bold" x-text="r.nama"></td>
+                  <td class="text-right font-mono" x-text="formatRp(r.pokok)"></td>
+                  <td class="text-right font-mono" x-text="formatRp(r.wajib)"></td>
+                  <td class="text-right font-mono" x-text="formatRp(r.sukarela)"></td>
+                  <td class="text-right font-bold currency-green font-mono" x-text="formatRp(Number(r.pokok) + Number(r.wajib) + Number(r.sukarela))"></td>
+                  <td class="flex justify-center gap-1">
+                    <button @click="loadDetail(r)" class="btn btn-secondary btn-sm">Buka Buku &rarr;</button>
+                    <div class="relative group">
+                       <button class="btn btn-success btn-sm flex items-center gap-1" style="background-color: #ecfdf5; color: #059669; border: 1px solid #10b98133;">
+                          <i class="ri-whatsapp-line"></i> Tagih
+                       </button>
+                       <div class="absolute right-0 bottom-full mb-2 w-40 bg-white shadow-xl border border-slate-200 rounded hidden group-hover:block z-50 overflow-hidden text-left animate-in fade-in slide-in-from-bottom-2">
+                          <button @click="sendWABilling('wajib', r)" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 border-b border-slate-100 flex items-center gap-2 text-slate-700">
+                             <i class="ri-calendar-event-line text-blue-500"></i> Iuran Wajib
+                          </button>
+                          <button @click="sendWABilling('pokok', r)" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 flex items-center gap-2 text-slate-700">
+                             <i class="ri-bank-card-line text-emerald-500"></i> Iuran Pokok
+                          </button>
+                       </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Transaksi -->
+    <div class="modal-overlay" x-show="showModal" style="display: none;">
+      <div class="modal" @click.away="showModal = false">
+        <h3 class="modal-title"><span x-text="txTipe === 'setoran' ? '🔴 Setoran' : '🔺 Penarikan'"></span> Simpanan</h3>
+        <p class="modal-sub">Jurnal akuntansi SAK EP (Kas &amp; Simpanan Anggota) akan dibuat secara <strong class="text-blue-600 font-semibold cursor-help" title="Debit Kas, Kredit Simpanan (atau sebaliknya)">otomatis <i class="ri-question-line"></i></strong>.</p>
+        
+        <form @submit.prevent="submitTx">
+          <div class="form-group">
+            <label class="form-label">Tanggal Transaksi *</label>
+            <input type="date" x-model="form.tanggal" required class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Jenis Simpanan *</label>
+            <select x-model="form.simpanan_id" required class="form-control">
+              <option value="">-- Pilih Jenis --</option>
+              <template x-for="s in saldoDetail.filter(s => txTipe === 'setoran' || Number(s.saldo) > 0)" :key="s.id">
+                <option :value="s.id" x-text="s.jenis + ' (Saldo: ' + formatRp(s.saldo) + ')'"></option>
+              </template>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nominal (Rp) *</label>
+            <input type="number" x-model.number="form.nominal" required min="1" class="form-control font-mono text-lg text-blue-600 font-semibold" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Keterangan / Referensi</label>
+            <input type="text" x-model="form.keterangan" class="form-control" placeholder="Slip setor 001 / Via transfer BNI...">
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showModal = false">Batal</button>
+            <button type="submit" class="btn btn-primary" :class="txTipe === 'setoran' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-600 hover:bg-red-500'" :disabled="saving">
+              <span x-show="!saving" x-text="txTipe === 'setoran' ? 'Simpan Setoran & Jurnal' : 'Tarik Simpanan & Jurnal'"></span>
+              <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> Memproses Jurnal...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+  <style>
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+  </style>
+</body>
+</html>

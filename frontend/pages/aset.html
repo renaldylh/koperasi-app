@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Aset Tetap - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/modules/aset.js"></script>
+</head>
+<body x-data="app()" class="app-layout text-slate-800">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="asetModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Pusat Manajemen Aset Tetap</h1>
+    </header>
+
+    <div class="page-content">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Aset Tetap (Penyusutan)</h2>
+          <p class="page-subtitle mb-0">Manajemen inventaris aset dan otomatisasi penyusutan bulanan (Garis Lurus).</p>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="window.print()" class="btn btn-secondary"><i class="ri-printer-line"></i> Cetak Aset</button>
+          <button @click="triggerPenyusutanManual()" class="btn btn-secondary border-blue-600/30 text-blue-600 font-semibold" :disabled="loading">
+             <i class="ri-refresh-line"></i> Proses Penyusutan Manual
+          </button>
+          <button @click="openModal()" class="btn btn-primary bg-blue-600 hover:bg-blue-500"><i class="ri-add-line"></i> Tambah Aset</button>
+        </div>
+      </div>
+
+      <!-- Kop Surat (Print Only) -->
+      <div class="border-b-4 border-double border-slate-900 pb-4 mb-6 hidden print:flex items-start gap-6">
+        <img src="/assets/img/logo-koperasi.png" alt="Logo Koperasi" class="w-24 h-24 object-contain">
+        <div class="flex-1 text-center">
+          <h1 class="text-2xl font-black uppercase tracking-widest text-slate-900 border-b border-slate-300 pb-1 mb-1">Koperasi Simpan Pinjam Ukoperasi</h1>
+          <p class="text-sm font-bold uppercase text-slate-700 tracking-wider">Badan Hukum No: AHU-12345.AH.01.26.Tahun 2025</p>
+          <p class="text-xs text-slate-600 mt-1">Jl. Ekonomi Makmur No. 88, Kota Tekno, Indonesia | Telp: (021) 555-0123</p>
+          <p class="text-xs text-blue-600 font-semibold italic mt-1 font-bold">Laporan Daftar Inventaris Aset Tetap</p>
+        </div>
+      </div>
+
+      <div class="card p-0">
+        <div x-show="loading" class="p-8 text-center"><div class="spinner mx-auto"></div></div>
+        
+        <div class="table-wrap" x-show="!loading">
+          <table>
+            <thead>
+              <tr>
+                <th>Kode Aset</th>
+                <th>Nama & Kategori</th>
+                <th>Tgl Peroleh</th>
+                <th class="text-right">Harga Peroleh</th>
+                <th class="text-right">Akm. Susut</th>
+                <th class="text-right">Nilai Buku</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr x-show="asetList.length === 0"><td colspan="7" class="text-center p-8 empty-state"><i class="ri-community-line big-icon"></i><div class="title">Belum ada data aset tetap</div></td></tr>
+              <template x-for="a in asetList" :key="a.id">
+                <tr>
+                  <td class="font-mono text-xs text-blue-600" x-text="a.kode"></td>
+                  <td>
+                    <div class="font-bold" x-text="a.nama"></div>
+                    <div class="text-[10px] text-muted uppercase tracking-wider" x-text="a.kategori"></div>
+                  </td>
+                  <td class="text-sm" x-text="formatDate(a.tanggal_perolehan)"></td>
+                  <td class="text-right font-mono" x-text="formatRp(a.harga_perolehan)"></td>
+                  <td class="text-right font-mono text-rose-600" x-text="formatRp(a.akumulasi_penyusutan)"></td>
+                  <td class="text-right font-mono font-bold text-blue-600 font-semibold" x-text="formatRp(a.nilai_buku)"></td>
+                  <td>
+                    <span class="badge" :class="a.status === 'aktif' ? 'badge-blue' : 'badge-gray'" x-text="a.status.toUpperCase()"></span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-4 border-t border-slate-200 flex justify-between items-center" x-show="meta.totalPages > 1">
+          <div class="text-xs text-muted">Total: <span x-text="meta.total"></span> aset</div>
+          <div class="pagination">
+            <button class="page-btn" :disabled="meta.page === 1" @click="loadData(meta.page - 1)"><i class="ri-arrow-left-s-line"></i></button>
+            <span class="text-xs px-2" x-text="`${meta.page} / ${meta.totalPages}`"></span>
+            <button class="page-btn" :disabled="meta.page === meta.totalPages" @click="loadData(meta.page + 1)"><i class="ri-arrow-right-s-line"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Tambah Aset -->
+      <div class="modal-overlay" x-show="showModal" style="display: none;">
+        <div class="modal max-w-2xl" @click.away="showModal = false">
+          <h3 class="modal-title"><i class="ri-building-line text-blue-600 mr-2"></i> Registrasi Aset Tetap Baru</h3>
+          <form @submit.prevent="submitForm">
+            <div class="grid grid-cols-2 gap-4">
+               <div class="form-group">
+                 <label class="form-label">Kode Aset</label>
+                 <input type="text" x-model="form.kode" class="form-control font-mono" required readonly>
+               </div>
+               <div class="form-group">
+                 <label class="form-label">Kategori</label>
+                 <select x-model="form.kategori" class="form-control">
+                    <option value="Kendaraan">Kendaraan</option>
+                    <option value="Bangunan">Bangunan / Gedung</option>
+                    <option value="Tanah">Tanah</option>
+                    <option value="Peralatan">Peralatan Kantor</option>
+                 </select>
+               </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Nama / Deskripsi Aset *</label>
+              <input type="text" x-model="form.nama" class="form-control" placeholder="Contoh: Mobil Xenia 2024" required>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+               <div class="form-group">
+                  <label class="form-label">Tgl Perolehan *</label>
+                  <input type="date" x-model="form.tanggal_perolehan" class="form-control" required>
+               </div>
+               <div class="form-group">
+                  <label class="form-label">Harga Peroleh (Rp) *</label>
+                  <input type="number" x-model.number="form.harga_perolehan" class="form-control font-mono font-bold" required>
+               </div>
+               <div class="form-group">
+                  <label class="form-label">Nilai Sisa (Rp)</label>
+                  <input type="number" x-model.number="form.nilai_sisa" class="form-control font-mono">
+               </div>
+               <div class="form-group">
+                  <label class="form-label">Umur (Bulan) *</label>
+                  <input type="number" x-model.number="form.umur_ekonomis" class="form-control" placeholder="Contoh: 60" required>
+               </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4 mt-2">
+               <div class="form-group">
+                  <label class="form-label">Rekening Beban Penyusutan *</label>
+                  <select x-model="form.beban_rekening_id" class="form-control" required>
+                     <template x-for="r in rekeningBeban" :key="r.id">
+                        <option :value="r.id" x-text="`${r.kode} - ${r.nama}`"></option>
+                     </template>
+                  </select>
+               </div>
+               <div class="form-group">
+                  <label class="form-label">Rekening Akumulasi Penyusutan *</label>
+                  <select x-model="form.akumulasi_rekening_id" class="form-control" required>
+                     <template x-for="r in rekeningAkumulasi" :key="r.id">
+                        <option :value="r.id" x-text="`${r.kode} - ${r.nama}`"></option>
+                     </template>
+                  </select>
+               </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" @click="showModal = false" class="btn btn-secondary">Batal</button>
+              <button type="submit" class="btn btn-primary bg-blue-600 hover:bg-blue-500" :disabled="submitLoading">
+                <span x-show="!submitLoading">Simpan Aset</span>
+                <span x-show="submitLoading"><i class="ri-loader-4-line animate-spin"></i> Menyimpan...</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Signature Section (Print Only) -->
+      <div class="mt-12 hidden print:grid grid-cols-2 gap-20 text-center">
+         <div class="flex flex-col items-center">
+            <p class="text-sm font-semibold mb-20">Mengetahui,<br>Ketua Koperasi</p>
+            <div class="border-b-2 border-slate-900 w-48 font-bold uppercase text-slate-900">Bp. H. Muhammad, S.E.</div>
+         </div>
+         <div class="flex flex-col items-center">
+            <p class="text-sm font-semibold mb-20">Dicetak Pada: <span x-text="new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})"></span><br>Bendahara</p>
+            <div class="border-b-2 border-slate-900 w-48 font-bold uppercase text-slate-900" x-text="user?.nama"></div>
+         </div>
+      </div>
+
+    </div>
+  </main>
+</body>
+</html>
+

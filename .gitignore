@@ -1,0 +1,21 @@
+# Git Ignore: Ukoperasi
+# Backend
+backend/node_modules/
+backend/.env
+backend/logs/
+backend/dist/
+
+# Frontend
+frontend/node_modules/
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Project Specific
+seed_coa.js
+/tmp/
+.gemini/

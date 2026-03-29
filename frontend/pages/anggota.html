@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Anggota - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/modules/anggota.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="anggotaModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Buku Anggota Koperasi</h1>
+    </header>
+
+    <div class="page-content">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Daftar Anggota</h2>
+          <p class="page-subtitle mb-0">Kelola data buku anggota, status aktif, dan profil.</p>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="window.print()" class="btn btn-secondary"><i class="ri-printer-line"></i> Cetak Daftar</button>
+          <input type="text" x-model="search" @input.debounce.500ms="loadData(1)" class="topbar-search" placeholder="Cari nama atau NIK...">
+          <button @click="showImportModal = true" class="btn btn-secondary border-dashed"><i class="ri-upload-cloud-line"></i> Import Data</button>
+          <button @click="openModal()" class="btn btn-primary"><i class="ri-user-add-line"></i> Tambah Anggota</button>
+        </div>
+      </div>
+
+      <!-- Kop Surat (Print Only) -->
+      <div class="border-b-4 border-double border-slate-900 pb-4 mb-6 hidden print:flex items-start gap-6">
+        <img src="/assets/img/logo-koperasi.png" alt="Logo Koperasi" class="w-24 h-24 object-contain">
+        <div class="flex-1 text-center">
+          <h1 class="text-2xl font-black uppercase tracking-widest text-slate-900 border-b border-slate-300 pb-1 mb-1">Koperasi Simpan Pinjam Ukoperasi</h1>
+          <p class="text-sm font-bold uppercase text-slate-700 tracking-wider">Badan Hukum No: AHU-12345.AH.01.26.Tahun 2025</p>
+          <p class="text-xs text-slate-600 mt-1">Jl. Ekonomi Makmur No. 88, Kota Tekno, Indonesia | Telp: (021) 555-0123</p>
+          <p class="text-xs text-blue-600 font-semibold italic mt-1 font-bold">Laporan Buku Daftar Anggota Koperasi</p>
+        </div>
+      </div>
+
+      <div class="card p-0">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>No Anggota</th>
+                <th>Nama Lengkap</th>
+                <th>NIK</th>
+                <th>Tgl Masuk</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr x-show="loading"><td colspan="6" class="text-center p-8"><div class="spinner mx-auto"></div></td></tr>
+              <tr x-show="!loading && anggota.length === 0"><td colspan="6" class="empty-state"><i class="ri-group-line big-icon"></i><div class="title">Tidak ada data anggota</div></td></tr>
+              
+              <template x-for="a in anggota" :key="a.id">
+                <tr>
+                  <td class="font-mono text-sm text-blue-600 font-semibold" x-text="a.no_anggota"></td>
+                  <td>
+                    <div class="name" x-text="a.nama"></div>
+                    <div class="sub" x-text="a.telepon || '-'"></div>
+                  </td>
+                  <td x-text="a.nik"></td>
+                  <td x-text="formatDate(a.tanggal_masuk)"></td>
+                  <td>
+                    <span class="badge" :class="a.status === 'aktif' ? 'badge-green' : 'badge-red'" x-text="a.status.replace('_', ' ').toUpperCase()"></span>
+                  </td>
+                  <td>
+                    <div class="flex gap-2">
+                        <button @click="openModal(a)" class="btn btn-secondary btn-sm btn-icon border-0" title="Edit"><i class="ri-edit-line"></i></button>
+                        <a :href="`/pages/anggota_ledger.html?id=${a.id}`" class="btn btn-secondary btn-sm btn-icon border-0 text-emerald-600 font-semibold hover:text-emerald-700" title="Buku Pembantu"><i class="ri-contacts-book-2-line"></i></a>
+                        <a :href="`/pages/simpanan.html?id=${a.id}`" class="btn btn-secondary btn-sm btn-icon border-0 text-blue-600 font-semibold hover:text-blue-700" title="Buku Simpanan"><i class="ri-wallet-3-line"></i></a>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="p-4 border-t border-slate-200 flex justify-between items-center" x-show="meta.totalPages > 1">
+          <div class="text-xs text-muted">Total: <span x-text="meta.total"></span> anggota</div>
+          <div class="pagination">
+            <button class="page-btn" :disabled="meta.page === 1" @click="loadData(meta.page - 1)"><i class="ri-arrow-left-s-line"></i></button>
+            <span class="text-xs px-2" x-text="`${meta.page} / ${meta.totalPages}`"></span>
+            <button class="page-btn" :disabled="meta.page === meta.totalPages" @click="loadData(meta.page + 1)"><i class="ri-arrow-right-s-line"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Form -->
+    <div class="modal-overlay" x-show="showModal" style="display: none;">
+      <div class="modal modal-lg" @click.away="showModal = false">
+        <h3 class="modal-title" x-text="isEdit ? 'Update Data Anggota' : 'Pendaftaran Anggota Baru'"></h3>
+        <p class="modal-sub">Data ini akan tercatat dalam Buku Daftar Anggota Koperasi.</p>
+        
+        <form @submit.prevent="submitForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">No Anggota (Otomatis jika kosong)</label>
+              <input type="text" x-model="form.no_anggota" class="form-control" placeholder="AGT-...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">NIK (KTP) *</label>
+              <input type="text" x-model="form.nik" required class="form-control" placeholder="16 digit NIK">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Nama Lengkap *</label>
+            <input type="text" x-model="form.nama" required class="form-control">
+          </div>
+          
+          <div class="form-row-3">
+            <div class="form-group">
+              <label class="form-label">Tempat Lahir</label>
+              <input type="text" x-model="form.tempat_lahir" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tanggal Lahir</label>
+              <input type="date" x-model="form.tanggal_lahir" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Jenis Kelamin</label>
+              <select x-model="form.jenis_kelamin" class="form-control">
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Alamat Domisili</label>
+            <textarea x-model="form.alamat" class="form-control" rows="2"></textarea>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label class="form-label">No. WhatsApp/Telepon</label>
+              <input type="text" x-model="form.telepon" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pekerjaan</label>
+              <input type="text" x-model="form.pekerjaan" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tanggal Masuk *</label>
+              <input type="date" x-model="form.tanggal_masuk" required class="form-control">
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showModal = false">Batal</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="!saving" x-text="isEdit ? 'Simpan Perubahan' : 'Daftarkan Anggota'"></span>
+              <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> Menyimpan...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Import Excel -->
+    <div class="modal-overlay" x-show="showImportModal" style="display: none;">
+      <div class="modal" @click.away="showImportModal = false">
+        <h3 class="modal-title"><i class="ri-file-excel-2-line text-blue-600"></i> Import Data Anggota</h3>
+        <p class="modal-sub">Unggah file Excel (.xlsx) untuk memigrasi data anggota secara massal. Pastikan format kolom sesuai dengan template standar.</p>
+        
+        <form @submit.prevent="submitImport">
+          <div class="card bg-dark-3 border-dashed border-2 border-blue-600/30 p-8 text-center cursor-pointer mb-6 hover:bg-[rgba(37,99,235,0.05)] transition-colors"
+               @click="$refs.fileInput.click()">
+             <i class="ri-upload-cloud-fill text-4xl text-blue-600/50 mb-2"></i>
+             <p class="font-bold text-sm text-slate-600" x-show="!importFile">Klik untuk memilih file Excel (Max 5MB)</p>
+             <p class="font-bold text-sm text-blue-600 font-semibold" x-show="importFile" x-text="importFile?.name"></p>
+             <input type="file" x-ref="fileInput" accept=".xlsx" class="hidden" @change="handleFile">
+          </div>
+          
+          <div class="bg-[rgba(59,130,246,0.1)] text-blue-700 p-4 rounded-lg text-xs leading-relaxed mb-4">
+             <strong>Aturan Kolom Excel (Baris 1 = Header):</strong><br/>
+             Col A: No Anggota (Optional). Col B: NIK. Col C: Nama.<br/>
+             Col D: Tanggal Lahir (YYYY-MM-DD). Col E: Telp. Col F: Alamat. Col G: Tgl Masuk.
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showImportModal = false">Batal</button>
+            <button type="submit" class="btn btn-primary bg-blue-600 hover:bg-blue-700" :disabled="!importFile || saving">
+              <span x-show="!saving">Mulai Proses Import</span>
+              <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> Membaca File...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </main>
+</body>
+</html>

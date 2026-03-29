@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Akuntansi Koperasi - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/components/ExcelEditor.js"></script>
+  <script src="/assets/js/modules/akuntansi.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="akuntansiModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Buku Akuntansi Sentral (SAK EP)</h1>
+    </header>
+
+    <div class="page-content">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6" x-show="!excelMode">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div>
+            <h2 class="page-title">Sistem Penjurnalan Otomatis</h2>
+            <p class="page-subtitle mb-0 text-slate-600">Double-entry immutable ledger, buku besar, dan daftar chart of accounts.</p>
+          </div>
+          <div class="flex gap-2">
+            <button @click="toggleExcelMode()" class="btn btn-secondary">
+               <i class="ri-table-line"></i> <span>Mode Spreadsheet</span>
+            </button>
+            <button x-show="tab === 'jurnal' || tab === 'buku_besar'" onclick="window.print()" class="btn btn-secondary"><i class="ri-printer-line"></i> Cetak Laporan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs (Hide in Excel Mode) -->
+      <div x-show="!excelMode" class="flex gap-2 mb-6 border-b border-slate-200 pb-1 overflow-x-auto hide-scrollbar">
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2" :class="tab === 'jurnal' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'jurnal'">Jurnal Umum</button>
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2" :class="tab === 'buku_besar' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'buku_besar'">Buku Besar</button>
+        <button class="px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors border-b-2" :class="tab === 'coa' ? 'text-primary border-primary bg-[rgba(37,99,235,0.05)]' : 'text-muted border-transparent hover:text-slate-800'" @click="tab = 'coa'">Chart of Accounts (CoA)</button>
+      </div>
+
+      <!-- JURNAL UMUM -->
+      <div x-show="tab === 'jurnal' && !excelMode" x-cloak>
+        <div class="flex gap-3 mb-4">
+           <input type="month" x-model="filterBulan" @change="loadJurnal()" class="topbar-search w-40">
+           <input type="text" x-model="searchJurnal" @input.debounce.500ms="loadJurnal()" class="topbar-search w-64" placeholder="Cari ref/keterangan...">
+        </div>
+        
+        <div class="card p-0">
+          <div class="table-wrap">
+            <table class="w-full">
+               <thead>
+                  <tr>
+                     <th class="w-32">Tanggal & Referensi</th>
+                     <th>Akun / Rekening</th>
+                     <th class="w-16">Post</th>
+                     <th class="text-right w-40">Debit</th>
+                     <th class="text-right w-40">Kredit</th>
+                  </tr>
+               </thead>
+               <tbody>
+                  <tr x-show="loadingJurnal"><td colspan="5" class="text-center py-8"><div class="spinner mx-auto"></div></td></tr>
+                  <tr x-show="!loadingJurnal && jurnal.length === 0"><td colspan="5" class="empty-state"><i class="ri-book-3-line big-icon"></i><div class="title">Buku Jurnal Umum kosong pada bulan ini</div></td></tr>
+                  
+                  <template x-for="j in jurnal" :key="j.id">
+                     <!-- Jurnal Wrapper (Kumpulan Header & Details) -->
+                     <template x-for="(d, idx) in j.jurnal_details" :key="d.id">
+                        <tr :class="idx === j.jurnal_details.length - 1 ? 'border-b-2 border-emerald-500/20' : 'border-b border-[rgba(255,255,255,0.02)]'">
+                           <!-- Cuma print tanggal 1x per header -->
+                           <td x-show="idx === 0" :rowspan="j.jurnal_details.length" class="align-top bg-white">
+                              <div class="font-bold whitespace-nowrap" x-text="formatDate(j.tanggal)"></div>
+                              <div class="font-mono text-xs text-blue-600 mt-1" x-text="j.no_jurnal"></div>
+                              <div class="text-[10px] text-muted mt-2 leading-tight" x-text="j.keterangan"></div>
+                           </td>
+
+                           <td :class="d.posisi === 'K' ? 'pl-8' : ''">
+                              <div class="font-bold flex items-center gap-2">
+                                 <span x-text="d.rekening.nama"></span>
+                                 <span class="text-[9px] px-1 bg-white rounded font-mono text-slate-600" x-text="d.rekening.kode"></span>
+                              </div>
+                           </td>
+                           <td class="font-mono text-xs font-bold" :class="d.posisi==='D'?'text-blue-600 font-semibold':'text-red-600'" x-text="d.posisi"></td>
+                           <td class="text-right font-mono" x-text="d.posisi === 'D' ? formatRp(d.nominal) : '-'"></td>
+                           <td class="text-right font-mono" x-text="d.posisi === 'K' ? formatRp(d.nominal) : '-'"></td>
+                        </tr>
+                     </template>
+                  </template>
+               </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXCEL MODE: JURNAL SPREADSHEET -->
+      <div x-show="excelMode" class="fade-in -mt-4 bg-[#f3f4f6] min-h-screen">
+         <div class="bg-white border-b px-4 py-2 flex justify-between items-center sticky top-0 z-50">
+            <div class="flex items-center gap-6">
+               <button @click="toggleExcelMode()" class="text-slate-500 hover:text-slate-800"><i class="ri-arrow-left-line text-xl"></i></button>
+               <div class="flex items-center gap-3">
+                  <div class="bg-emerald-600 text-white p-1.5 rounded flex items-center justify-center"><i class="ri-file-excel-2-fill text-lg"></i></div>
+                  <div>
+                     <h3 class="font-bold text-sm leading-none">Journal_Editor_Live.xlsx</h3>
+                     <p class="text-[10px] text-slate-400">Excel-Core v2.0 • SAK EP Compliant</p>
+                  </div>
+               </div>
+            </div>
+            <div class="flex gap-2">
+               <label class="btn btn-secondary btn-sm cursor-pointer border-emerald-200 hover:bg-emerald-50">
+                  <i class="ri-upload-2-line"></i> Import Excel
+                  <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
+               </label>
+               <button @click="saveExcel()" class="btn btn-primary btn-sm bg-emerald-600 border-none px-6" :disabled="saving || !isBalanced">
+                  <i class="ri-save-line"></i> <span x-text="saving ? 'Saving...' : 'Save to Ledger'"></span>
+               </button>
+            </div>
+         </div>
+
+         <!-- Excel Ribbon & Formula Bar -->
+         <div class="bg-white border-b px-4 py-1.5 flex items-center gap-4 shadow-sm">
+            <div class="flex items-center gap-1 border-r pr-4">
+               <button class="p-1 hover:bg-slate-100 rounded"><i class="ri-bold"></i></button>
+               <button class="p-1 hover:bg-slate-100 rounded"><i class="ri-italic"></i></button>
+               <button class="p-1 hover:bg-slate-100 rounded text-blue-600"><i class="ri-underline"></i></button>
+            </div>
+            <div class="flex-1 flex items-center gap-2 bg-slate-50 px-3 py-1 rounded border">
+                <span class="font-mono text-slate-400 font-bold italic text-sm">fx</span>
+                <input type="text" class="bg-transparent border-none w-full text-xs outline-none" placeholder="=SUM(D1:D100)">
+            </div>
+         </div>
+
+         <div class="p-4">
+            <div class="bg-white border shadow-2xl rounded-sm overflow-hidden flex flex-col h-[75vh]">
+               <div class="overflow-auto flex-1">
+                  <table class="excel-grid w-full">
+                     <thead>
+                        <tr>
+                           <th class="row-num"></th>
+                           <th style="width: 140px">TANGGAL</th>
+                           <th>KETERANGAN TRANSAKSI</th>
+                           <th style="width: 280px">AKUN (COA)</th>
+                           <th style="width: 60px">D/K</th>
+                           <th style="width: 180px">DEBIT</th>
+                           <th style="width: 180px">KREDIT</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        <template x-for="(row, i) in excelRows" :key="i">
+                           <tr>
+                              <td class="row-num" x-text="i+1"></td>
+                              <td class="p-0"><input type="date" x-model="row.tanggal" class="excel-input font-mono"></td>
+                              <td class="p-0"><input type="text" x-model="row.keterangan" class="excel-input" placeholder="..."></td>
+                              <td class="p-0">
+                                 <select x-model="row.coa" class="excel-select">
+                                    <option value="">(Pilih Akun)</option>
+                                    <template x-for="r in rekening" :key="r.kode">
+                                       <option :value="r.kode" x-text="`[${r.kode}] ${r.nama}`"></option>
+                                    </template>
+                                 </select>
+                              </td>
+                              <td class="p-0">
+                                 <select x-model="row.posisi" class="excel-select text-center font-bold">
+                                    <option value="D">D</option>
+                                    <option value="K">K</option>
+                                 </select>
+                              </td>
+                              <td class="p-1"><input type="text" x-model="row.debit" @input="evaluateCell(row, 'debit', $event.target.value)" class="excel-input text-right font-mono" placeholder="0"></td>
+                              <td class="p-1"><input type="text" x-model="row.kredit" @input="evaluateCell(row, 'kredit', $event.target.value)" class="excel-input text-right font-mono" placeholder="0"></td>
+                           </tr>
+                        </template>
+                     </tbody>
+                  </table>
+               </div>
+               <!-- Excel Status Bar -->
+               <div class="bg-emerald-700 text-white px-4 py-2 flex justify-between items-center text-xs font-bold">
+                  <div class="flex gap-4">
+                     <span>Total Debit: <span x-text="formatRp(totalDebit)"></span></span>
+                     <span>Total Kredit: <span x-text="formatRp(totalKredit)"></span></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                     <span x-show="!isBalanced" class="bg-red-500 px-2 py-0.5 rounded animate-pulse">NOT BALANCED</span>
+                     <span x-show="isBalanced" class="bg-emerald-500 px-2 py-0.5 rounded">READY TO SAVE</span>
+                  </div>
+               </div>
+            </div>
+            <div class="mt-4 flex justify-center">
+               <button @click="addExcelRow()" class="px-6 py-2 border-2 border-dashed border-slate-300 rounded text-slate-400 hover:border-emerald-400 hover:text-emerald-500 transition-all font-bold">+ Insert New Row</button>
+            </div>
+         </div>
+      </div>
+
+      <!-- BUKU BESAR -->
+      <div x-show="tab === 'buku_besar' && !excelMode" x-cloak class="grid grid-cols-1 md:grid-cols-4 gap-6">
+         <!-- Sidebar Rekening (Hidden in Print) -->
+         <div class="card p-0 md:col-span-1 h-[70vh] flex flex-col print:hidden">
+            <div class="p-4 border-b border-slate-200">
+               <input type="text" x-model="searchBB" class="form-control w-full text-xs" placeholder="Cari rekening...">
+            </div>
+            <div class="overflow-y-auto flex-1 p-2">
+               <template x-for="r in rekening.filter(x => x.nama.toLowerCase().includes(searchBB.toLowerCase()) || x.kode.includes(searchBB))" :key="r.id">
+                  <div @click="loadBukuBesar(r.id)" class="px-3 py-2 text-sm rounded cursor-pointer transition flex justify-between" 
+                       :class="bbRekeningId === r.id ? 'bg-blue-600 font-bold' : 'hover:bg-[rgba(255,255,255,0.1)]'">
+                     <span x-text="r.kode" class="font-mono opacity-60 text-xs w-10"></span>
+                     <span x-text="r.nama" class="truncate flex-1"></span>
+                  </div>
+               </template>
+            </div>
+         </div>
+         
+         <!-- Konten Buku Besar -->
+         <div class="card p-0 md:col-span-3 h-[70vh] flex flex-col">
+            <div x-show="!bbRekeningId" class="flex-1 flex items-center justify-center text-muted">Arahkan/Pilih Buku Rekening di sebelah kiri</div>
+            
+            <template x-if="bbRekeningId">
+               <div class="flex flex-col h-full rounded-lg overflow-hidden">
+                  <div class="p-4 bg-[rgba(16,185,129,0.1)] border-b border-emerald-500/20 flex justify-between items-center shrink-0">
+                     <div>
+                        <h3 class="font-bold text-lg text-blue-600 font-semibold">Buku Besar: <span x-text="rekening.find(x=>x.id===bbRekeningId)?.nama"></span></h3>
+                        <div class="text-xs font-mono text-muted">Kode Akun: <span x-text="rekening.find(x=>x.id===bbRekeningId)?.kode"></span> | Sifat Normal: <span x-text="rekening.find(x=>x.id===bbRekeningId)?.posisi_normal === 'D' ? 'DEBET' : 'KREDIT'"></span></div>
+                     </div>
+                     <input type="month" x-model="filterBBulan" @change="loadBukuBesar(bbRekeningId)" class="form-control w-40 text-sm">
+                  </div>
+                  
+                  <div class="table-wrap flex-1 overflow-y-auto">
+                     <table class="w-full">
+                        <thead class="sticky top-0 z-10 bg-dark-2 shadow">
+                           <tr><th>Tanggal</th><th>Keterangan</th><th>Ref Jurnal</th><th class="text-right">Debit</th><th class="text-right">Kredit</th><th class="text-right text-blue-600 font-semibold">Saldo</th></tr>
+                        </thead>
+                        <tbody>
+                           <tr x-show="loadingBB"><td colspan="6" class="text-center py-8"><div class="spinner mx-auto"></div></td></tr>
+                           <tr x-show="!loadingBB && bbData.length === 0"><td colspan="6" class="text-center py-6 text-muted text-sm border-t border-slate-200">Tidak ada transaksi bulan ini</td></tr>
+                           <template x-for="r in bbData" :key="r.id">
+                              <tr>
+                                 <td class="whitespace-nowrap" x-text="formatDate(r.tanggal)"></td>
+                                 <td class="text-xs max-w-xs break-words whitespace-normal" x-text="r.keterangan || r.jurnal_header.keterangan"></td>
+                                 <td class="font-mono text-xs" x-text="r.jurnal_header?.no_jurnal"></td>
+                                 <td class="text-right font-mono text-blue-600" x-text="r.posisi === 'D' ? formatRp(r.nominal) : ''"></td>
+                                 <td class="text-right font-mono text-amber-300" x-text="r.posisi === 'K' ? formatRp(r.nominal) : ''"></td>
+                                 <td class="text-right font-mono font-bold bg-white text-blue-600 font-semibold" x-text="formatRp(r.running_balance)"></td>
+                              </tr>
+                           </template>
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            </template>
+         </div>
+      </div>
+
+      <!-- Signature Section (Print Only) -->
+      <div class="mt-12 hidden print:grid grid-cols-2 gap-20 text-center">
+         <div class="flex flex-col items-center">
+            <p class="text-sm font-semibold mb-20">Mengetahui,<br>Ketua Koperasi</p>
+            <div class="border-b-2 border-slate-900 w-48 font-bold uppercase text-slate-900">Bp. H. Muhammad, S.E.</div>
+         </div>
+         <div class="flex flex-col items-center">
+            <p class="text-sm font-semibold mb-20">Dicetak Pada: <span x-text="new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})"></span><br>Bendahara</p>
+            <div class="border-b-2 border-slate-900 w-48 font-bold uppercase text-slate-900" x-text="user?.nama"></div>
+         </div>
+      </div>
+
+    </div>
+  </main>
+  <style>.hide-scrollbar::-webkit-scrollbar { display: none; }</style>
+</body>
+</html>

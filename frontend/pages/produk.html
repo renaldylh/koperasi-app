@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Buku Produk & Inventaris - Ukoperasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/components/ExcelEditor.js"></script>
+  <script src="/assets/js/modules/produk.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+  
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="sidebar-logo-image w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div><div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div><div class="sidebar-logo-sub">SAK EP COMPLIANT</div></div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i><span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content" x-data="produkModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true"><i class="ri-menu-line"></i></button>
+      <h1 class="topbar-title hidden md:block">Manajemen Produk & Inventaris Toko</h1>
+    </header>
+
+    <div class="page-content">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h2 class="page-title">Buku Daftar Produk</h2>
+          <p class="page-subtitle mb-0">Kelola stok, kategori, dan harga jual barang/jasa koperasi.</p>
+        </div>
+        <div class="flex gap-2 print:hidden">
+          <button @click="exportExcel()" class="btn btn-secondary"><i class="ri-file-excel-2-line text-emerald-600"></i> Ekspor Excel</button>
+          <button @click="showKategoriModal = true" class="btn btn-secondary border-dashed"><i class="ri-folders-line"></i> Kelola Kategori</button>
+          <button @click="toggleExcelMode()" class="btn" :class="excelMode ? 'btn-danger' : 'btn-success'" x-text="excelMode ? 'Tutup Excel' : 'Excel mode'"></button>
+          <button @click="openModal()" class="btn btn-primary bg-blue-600 hover:bg-blue-500"><i class="ri-add-line"></i> Tambah Produk</button>
+        </div>
+      </div>
+
+      <!-- Excel Mode View -->
+      <div x-show="excelMode" class="fade-in" style="display: none;">
+         <div class="card p-0 overflow-hidden mb-6 border-emerald-500/30">
+            <div class="bg-emerald-600 text-white px-4 py-2 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <span class="font-black tracking-tighter uppercase text-xs">Excel Bulk Product Editor</span>
+                    <div class="h-4 w-px bg-white/20"></div>
+                    <span class="text-[10px] opacity-80 italic">Tip: Paste columns: Kode, Barcode, Nama, KategoriID, Harga Jual, Stok</span>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="saveBulk()" class="btn btn-sm bg-white text-emerald-700 font-bold px-4 border-none hover:bg-emerald-50" :disabled="saving">
+                        <span x-show="!saving">Update Massal &rarr;</span>
+                        <span x-show="saving">Proses...</span>
+                    </button>
+                </div>
+            </div>
+            <div class="table-wrap max-h-[70vh] relative">
+               <table class="excel-v2">
+                  <thead>
+                     <tr>
+                        <th class="row-idx">#</th>
+                        <th>Kode</th>
+                        <th>Barcode</th>
+                        <th>Nama Produk</th>
+                        <th>Kat.ID</th>
+                        <th class="text-right">Harga Jual</th>
+                        <th class="text-right">Stok</th>
+                     </tr>
+                  </thead>
+                  <tbody>
+                     <template x-for="(row, i) in excelRows" :key="i">
+                        <tr>
+                           <td class="row-idx" x-text="i+1"></td>
+                           <td><input type="text" x-model="row.kode" class="cell-input font-mono" placeholder="PRD-001" @paste="handlePaste($event, i)"></td>
+                           <td><input type="text" x-model="row.barcode" class="cell-input" placeholder="..."></td>
+                           <td><input type="text" x-model="row.nama" class="cell-input font-bold" placeholder="Nama Barang"></td>
+                           <td><input type="text" x-model="row.kategori_id" class="cell-input text-center" placeholder="UUID"></td>
+                           <td><input type="text" x-model="row.harga_jual" @input="evaluateCell(row, 'harga_jual', $event.target.value)" class="cell-input text-right font-mono" placeholder="0"></td>
+                           <td><input type="text" x-model="row.stok_saat_ini" @input="evaluateCell(row, 'stok_saat_ini', $event.target.value)" class="cell-input text-right font-mono" placeholder="0"></td>
+                        </tr>
+                     </template>
+                  </tbody>
+               </table>
+            </div>
+            <div class="p-2 bg-slate-50 border-t flex gap-2">
+                <button @click="addExcelRow()" class="btn btn-secondary btn-sm"><i class="ri-add-line"></i> Tambah Baris</button>
+            </div>
+         </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-3 mb-6 print:hidden">
+        <div class="flex-1 min-w-[300px]">
+          <input type="text" x-model="search" @input.debounce.500ms="loadData(1)" class="topbar-search w-full" placeholder="Cari nama, kode, atau barcode...">
+        </div>
+        <select x-model="filterKategori" @change="loadData(1)" class="form-control w-48 text-sm">
+          <option value="">Semua Kategori</option>
+          <template x-for="k in kategori" :key="k.id">
+            <option :value="k.id" x-text="k.nama"></option>
+          </template>
+        </select>
+      </div>
+
+      <!-- TABLE -->
+      <div class="card p-0 overflow-hidden border border-slate-200">
+        <div class="table-wrap">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="w-24">Kode</th>
+                <th>Nama Produk / Layanan</th>
+                <th>Kategori</th>
+                <th class="text-right">Harga Jual</th>
+                <th class="text-right">Stok</th>
+                <th class="w-16">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr x-show="loading"><td colspan="6" class="text-center p-8"><div class="spinner mx-auto"></div></td></tr>
+              <tr x-show="!loading && produk.length === 0"><td colspan="6" class="empty-state"><i class="ri-shopping-bag-line big-icon"></i><div class="title">Belum ada data produk</div></td></tr>
+              
+              <template x-for="p in produk" :key="p.id">
+                <tr class="hover:bg-blue-50/30 transition-colors border-b border-slate-100 last:border-0">
+                  <td class="font-mono text-xs text-blue-600 font-semibold" x-text="p.kode"></td>
+                  <td>
+                    <div class="font-bold text-slate-800" x-text="p.nama"></div>
+                    <div class="text-[10px] text-muted font-mono" x-show="p.barcode" x-text="`Barcode: ${p.barcode}`"></div>
+                  </td>
+                  <td>
+                    <span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase" x-text="p.kategori?.nama || 'N/A'"></span>
+                  </td>
+                  <td class="text-right">
+                    <input type="number" x-model.number="p.harga_jual" @change="saveInline(p)" 
+                           class="form-control-minimal text-right font-mono font-bold text-blue-600 bg-transparent hover:bg-white focus:bg-white border-0 focus:ring-1 ring-blue-500" 
+                           style="width: 140px;">
+                  </td>
+                  <td class="text-right">
+                    <div class="flex flex-col items-end">
+                       <span class="font-mono font-bold" :class="p.stok_saat_ini <= p.stok_minimal ? 'text-rose-600' : 'text-emerald-600'" x-text="`${p.stok_saat_ini} ${p.satuan}`"></span>
+                       <div class="flex items-center gap-1 mt-1">
+                          <span class="text-[9px] text-muted">Min:</span>
+                          <input type="number" x-model.number="p.stok_minimal" @change="saveInline(p)" 
+                                 class="w-12 text-[10px] text-center border-b border-dashed border-slate-300 bg-transparent focus:border-blue-500">
+                       </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="flex gap-1 print:hidden">
+                       <button @click="openModal(p)" class="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition"><i class="ri-edit-line"></i></button>
+                       <button @click="deleteProduk(p.id)" class="p-1.5 text-rose-600 hover:bg-rose-100 rounded transition"><i class="ri-delete-bin-line"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Paginasi -->
+        <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center" x-show="meta.totalPages > 1">
+           <div class="text-xs text-muted">Total: <span class="font-bold" x-text="meta.total"></span> produk</div>
+           <div class="pagination flex gap-1">
+              <button class="px-3 py-1 border rounded bg-white hover:bg-slate-50 text-xs disabled:opacity-50" :disabled="meta.page === 1" @click="loadData(meta.page - 1)"><i class="ri-arrow-left-s-line"></i></button>
+              <div class="px-3 py-1 text-xs font-bold" x-text="`${meta.page} / ${meta.totalPages}`"></div>
+              <button class="px-3 py-1 border rounded bg-white hover:bg-slate-50 text-xs disabled:opacity-50" :disabled="meta.page === meta.totalPages" @click="loadData(meta.page + 1)"><i class="ri-arrow-right-s-line"></i></button>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL ADD/EDIT PRODUK -->
+    <div class="modal-overlay" x-show="showModal" style="display: none;">
+       <div class="modal modal-lg" @click.away="showModal = false">
+          <h3 class="modal-title" x-text="isEdit ? 'Update Data Produk' : 'Tambah Produk Baru'"></h3>
+          <p class="modal-sub">Input data produk/layanan untuk manajemen inventaris dan kasir.</p>
+
+          <form @submit.prevent="submitForm" class="mt-4">
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                   <label class="form-label">Kategori *</label>
+                   <select x-model="form.kategori_id" class="form-control" required>
+                      <option value="">-- Pilih Kategori --</option>
+                      <template x-for="k in kategori" :key="k.id">
+                         <option :value="k.id" x-text="k.nama"></option>
+                      </template>
+                   </select>
+                </div>
+                <div class="form-group">
+                   <label class="form-label">Tipe Produk</label>
+                   <select x-model="form.tipe" class="form-control">
+                      <option value="barang">Barang (Inventaris)</option>
+                      <option value="jasa">Jasa (Layanan)</option>
+                   </select>
+                </div>
+             </div>
+
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                <div class="form-group">
+                   <label class="form-label">Barcode (Opsional)</label>
+                   <input type="text" x-model="form.barcode" class="form-control font-mono" placeholder="Scan barcode produk...">
+                </div>
+                <div class="form-group">
+                   <label class="form-label">Kode Produk (Otomatis jika kosong)</label>
+                   <input type="text" x-model="form.kode" class="form-control font-mono uppercase" placeholder="PRD-...">
+                </div>
+             </div>
+
+             <div class="form-group mt-2">
+                <label class="form-label">Nama Produk / Layanan *</label>
+                <input type="text" x-model="form.nama" required class="form-control font-bold" placeholder="Contoh: Beras Premium 5kg">
+             </div>
+
+             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                <div class="form-group">
+                   <label class="form-label">Satuan (UOM) *</label>
+                   <input type="text" x-model="form.satuan" required class="form-control" placeholder="Pcs, Kg, Box, dll">
+                </div>
+                <div class="form-group">
+                   <label class="form-label">Stok Minimal *</label>
+                   <input type="number" x-model.number="form.stok_minimal" required class="form-control">
+                </div>
+                <div class="form-group">
+                   <label class="form-label">Metode Stok</label>
+                   <select x-model="form.metode_stok" class="form-control">
+                      <option value="fifo">FIFO (First In First Out)</option>
+                      <option value="average">Rata-Rata (Average)</option>
+                      <option value="none">Non-Stok (Jasa)</option>
+                   </select>
+                </div>
+             </div>
+
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div class="form-group">
+                   <label class="form-label text-blue-600 font-bold">Harga Beli Dasar (Rp)</label>
+                   <input type="number" x-model.number="form.harga_beli" class="form-control font-mono font-bold" placeholder="0">
+                </div>
+                <div class="form-group">
+                   <label class="form-label text-emerald-600 font-bold">Harga Jual Koperasi (Rp) *</label>
+                   <input type="number" x-model.number="form.harga_jual" required class="form-control font-mono font-bold text-lg" placeholder="0">
+                </div>
+             </div>
+
+             <div class="modal-footer mt-6">
+                <button type="button" @click="showModal = false" class="btn btn-secondary">Batal</button>
+                <button type="submit" class="btn btn-primary bg-blue-600 hover:bg-blue-700" :disabled="saving">
+                   <span x-show="!saving" x-text="isEdit ? 'Update Produk' : 'Simpan Produk Baru'"></span>
+                   <span x-show="saving"><i class="ri-loader-4-line animate-spin"></i> Memproses...</span>
+                </button>
+             </div>
+          </form>
+       </div>
+    </div>
+
+    <!-- MODAL KATEGORI -->
+    <div class="modal-overlay" x-show="showKategoriModal" style="display: none;">
+       <div class="modal" @click.away="showKategoriModal = false">
+          <h3 class="modal-title"><i class="ri-folders-line"></i> Kelola Kategori Produk</h3>
+          <div class="mt-4 p-4 bg-slate-50 rounded border mb-4">
+             <form @submit.prevent="submitKategori" class="flex gap-2">
+                <input type="text" x-model="formKategori.nama" required class="form-control text-sm" placeholder="Nama kategori baru...">
+                <button type="submit" class="btn btn-primary btn-sm shrink-0" :disabled="saving">Tambah</button>
+             </form>
+          </div>
+          <div class="max-h-60 overflow-y-auto border rounded">
+             <table class="w-full text-xs">
+                <template x-for="k in kategori" :key="k.id">
+                   <tr class="border-b last:border-0 hover:bg-slate-50">
+                      <td class="p-2 font-bold" x-text="k.nama"></td>
+                      <td class="p-2 text-right">
+                         <button class="text-rose-500"><i class="ri-delete-bin-7-line"></i></button>
+                      </td>
+                   </tr>
+                </template>
+             </table>
+          </div>
+          <div class="modal-footer mt-4">
+             <button @click="showKategoriModal = false" class="btn btn-secondary btn-sm">Tutup</button>
+          </div>
+       </div>
+    </div>
+
+  </main>
+</body>
+</html>

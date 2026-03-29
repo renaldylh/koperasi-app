@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kasir Pintar - Ukoperasi v2.0</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+</head>
+<body x-data="posModule()" class="bg-[#0f172a] text-slate-200 overflow-hidden h-screen flex flex-col">
+  <!-- Top Stats Bar (Premium Glass) -->
+  <header class="h-16 flex items-center px-6 bg-white/5 backdrop-blur-xl border-b border-white/10 shrink-0">
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <i class="ri-shopping-cart-2-fill text-white"></i>
+        </div>
+        <div>
+            <h1 class="text-sm font-black tracking-widest uppercase">UKOPERASI <span class="text-blue-500">POS</span></h1>
+            <p class="text-[10px] text-slate-400 font-mono" x-text="new Date().toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'short'})"></p>
+        </div>
+    </div>
+    
+    <div class="ml-auto flex items-center gap-8">
+        <div class="text-right">
+            <div class="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Sesi Kasir</div>
+            <div class="text-xs font-mono font-bold text-emerald-400" x-text="user.nama">...</div>
+        </div>
+        <button @click="location.href='/pages/dashboard.html'" class="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition">
+            <i class="ri-dashboard-3-line"></i>
+        </button>
+    </div>
+  </header>
+
+  <main class="flex flex-1 overflow-hidden">
+    <!-- Left: Product Discovery -->
+    <section class="w-3/5 flex flex-col border-r border-white/5 p-6 space-y-4 overflow-hidden">
+        <div class="relative">
+            <i class="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+            <input type="text" x-model="search" @input.debounce="loadProducts()" 
+                   placeholder="Scan Barcode atau Cari Nama Produk (F1)..." 
+                   class="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 ring-blue-500/10 transition text-lg font-medium">
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pr-2 pb-10">
+            <template x-for="p in products" :key="p.id">
+                <button @click="addToCart(p)" 
+                        class="group relative bg-white/5 border border-white/10 rounded-3xl p-4 text-left hover:bg-white/10 hover:border-blue-500/50 transition-all active:scale-95">
+                    <div class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="ri-add-circle-fill text-blue-500 text-2xl"></i>
+                    </div>
+                    <div class="text-blue-400 text-[10px] font-black uppercase mb-1" x-text="p.kategori?.nama"></div>
+                    <div class="text-sm font-bold text-slate-200 line-clamp-1" x-text="p.nama"></div>
+                    <div class="mt-4 flex justify-between items-end">
+                        <div class="text-lg font-black font-mono text-white" x-text="formatRp(p.harga_jual)"></div>
+                        <div class="text-[10px] font-mono" :class="p.stok_saat_ini < 10 ? 'text-rose-500 font-bold' : 'text-slate-500'">
+                           Stok: <span x-text="p.stok_saat_ini"></span>
+                        </div>
+                    </div>
+                </button>
+            </template>
+        </div>
+    </section>
+
+    <!-- Right: Cart & Checkout -->
+    <aside class="w-2/5 flex flex-col bg-slate-900/50 backdrop-blur-2xl">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+            <h2 class="font-black tracking-tighter uppercase text-xs text-slate-400">Keranjang Belanja</h2>
+            <button @click="cart = []" class="text-[10px] font-bold text-rose-500 hover:text-rose-400 uppercase">Kosongkan</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+            <template x-for="(item, idx) in cart" :key="item.id">
+                <div class="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition">
+                    <div class="flex-1">
+                        <div class="text-xs font-bold text-slate-300" x-text="item.nama"></div>
+                        <div class="text-[10px] text-slate-500 mt-1" x-text="formatRp(item.harga_jual)"></div>
+                    </div>
+                    <div class="flex items-center gap-3 bg-black/20 rounded-xl p-1 px-3">
+                        <button @click="decQty(idx)" class="text-slate-400 hover:text-white">-</button>
+                        <span class="text-sm font-black font-mono w-6 text-center" x-text="item.qty"></span>
+                        <button @click="incQty(idx)" class="text-slate-400 hover:text-white">+</button>
+                    </div>
+                    <div class="text-sm font-black font-mono text-emerald-400 w-24 text-right" x-text="formatRp(item.harga_jual * item.qty)"></div>
+                </div>
+            </template>
+            <div x-show="cart.length === 0" class="h-full flex flex-col items-center justify-center opacity-30 italic text-sm">
+                <i class="ri-shopping-basket-line text-6xl mb-4"></i>
+                <p>Belum ada produk dipilih</p>
+            </div>
+        </div>
+
+        <!-- Checkout Summary -->
+        <div class="p-6 bg-slate-800/80 border-t border-white/5 space-y-4">
+            <div class="flex justify-between items-end">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Bayar</span>
+                <span class="text-4xl font-black text-white font-mono" x-text="formatRp(total)"></span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase text-slate-500">Bayar (Rp)</label>
+                    <input type="number" x-model.number="bayar" class="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 focus:border-emerald-500 outline-none font-mono text-emerald-400 font-bold">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase text-slate-500">Kembalian</label>
+                    <div class="text-lg font-black font-mono" :class="kembali < 0 ? 'text-rose-500' : 'text-slate-200'" x-text="formatRp(kembali)"></div>
+                </div>
+            </div>
+
+            <button @click="checkout()" 
+                    :disabled="total === 0 || bayar < total || uploading"
+                    class="w-full py-5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:opacity-50 text-white rounded-3xl font-black text-xl shadow-xl shadow-blue-500/20 transition-all">
+                <span x-show="!uploading">PROSES BAYAR (F2)</span>
+                <span x-show="uploading">SEDANG MEMPROSES...</span>
+            </button>
+        </div>
+    </aside>
+  </main>
+
+  <script src="/assets/js/modules/kasir.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    .line-clamp-1 { 
+        display: -webkit-box; 
+        -webkit-line-clamp: 1; 
+        -webkit-box-orient: vertical; 
+        overflow: hidden; 
+        line-clamp: 1;
+    }
+  </style>
+</body>
+</html>

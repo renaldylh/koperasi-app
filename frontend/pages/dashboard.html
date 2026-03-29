@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Dashboard - Ukoperasi</title>
+  <meta name="theme-color" content="#1e40af">
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/modules/dashboard.js"></script>
+</head>
+<body x-data="app()" class="app-layout">
+
+  <!-- Mobile Sidebar Overlay -->
+  <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" :class="{'open': sidebarOpen}">
+    <div class="sidebar-logo">
+      <template x-if="settings.logo_url">
+        <img :src="settings.logo_url" class="w-10 h-10 rounded shadow-sm object-contain bg-white border border-slate-100">
+      </template>
+      <template x-if="!settings.logo_url">
+        <div class="sidebar-logo-icon"><i class="ri-leaf-fill"></i></div>
+      </template>
+      <div>
+        <div class="sidebar-logo-text" x-text="settings.app_name_alias || settings.nama_koperasi">Ukoperasi</div>
+        <div class="sidebar-logo-sub" x-text="settings.sidebar_logo_subtext || 'SAK EP COMPLIANT'">SAK EP COMPLIANT</div>
+      </div>
+    </div>
+    
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main Menu</div>
+      <template x-for="item in filteredNav" :key="item.name">
+        <a :href="item.url" class="nav-item" :class="{'active': isActive(item.url)}">
+          <i class="icon" :class="item.icon"></i>
+          <span x-text="item.name"></span>
+        </a>
+      </template>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user-row">
+        <div class="user-avatar" x-text="user?.nama?.charAt(0) || 'U'"></div>
+        <div class="user-info">
+          <div class="name truncate w-24" x-text="user?.nama">User</div>
+          <div class="role uppercase" x-text="user?.role">Role</div>
+        </div>
+        <i class="ri-logout-box-r-line logout-btn" @click="logout()" title="Logout"></i>
+      </div>
+      <div class="pt-2 border-t border-slate-200/50">
+        <p class="text-[9px] text-muted text-center" x-text="settings.app_footer_text"></p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content" x-data="dashboardModule()">
+    <header class="topbar">
+      <button class="topbar-btn md:hidden" @click="sidebarOpen = true">
+        <i class="ri-menu-line"></i>
+      </button>
+      <h1 class="topbar-title hidden md:block" x-text="(settings.app_name_alias || settings.nama_koperasi) + ' Dashboard'">Ukoperasi Dashboard</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <button class="topbar-btn"><i class="ri-notification-3-line"></i></button>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <h2 class="page-title" x-text="settings.dashboard_welcome_msg || 'Selamat Datang!'">Selamat Datang!</h2>
+      <p class="page-subtitle" x-text="settings.dashboard_subtitle_msg || 'Pembaruan data keuangan koperasi secara real-time.'">Pembaruan data keuangan koperasi secara real-time.</p>
+
+      <div x-show="loading" class="flex items-center justify-center p-12">
+        <div class="spinner"></div>
+      </div>
+
+      <div x-show="!loading" x-cloak>
+        <!-- Top Stats -->
+        <div class="stat-grid">
+          <div class="stat-card stat-green">
+            <i class="ri-wallet-3-line icon"></i>
+            <div class="label">Total Simpanan Anggota</div>
+            <div class="value" x-text="formatRp(stats.total_simpanan)"></div>
+            <div class="change opacity-80 mt-1">Modal / Kewajiban Koperasi</div>
+          </div>
+          <div class="stat-card stat-blue">
+            <i class="ri-hand-coin-line icon"></i>
+            <div class="label">Total Pinjaman Cair</div>
+            <div class="value" x-text="formatRp(stats.total_pinjaman)"></div>
+            <div class="change opacity-80 mt-1">Aset Produktif Koperasi</div>
+          </div>
+          <div class="stat-card stat-amber">
+            <i class="ri-line-chart-line icon"></i>
+            <div class="label">SHU Berjalan</div>
+            <div class="value" x-text="formatRp(stats.shu_berjalan)"></div>
+            <div class="change opacity-80 mt-1">Pendapatan Bersih (Thn <span x-text="tahun"></span>)</div>
+          </div>
+          <div class="stat-card stat-violet">
+            <i class="ri-team-line icon"></i>
+            <div class="label">Total Anggota Aktif</div>
+            <div class="value" x-text="stats.total_anggota + ' Orang'"></div>
+            <div class="change opacity-80 mt-1">Basis transaksi usaha</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ri-funds-line text-blue-600 mr-2"></i> Kinerja Piutang SAK EP</h3>
+            </div>
+            <div class="flex flex-col gap-4 mt-2">
+              <div class="flex justify-between items-center p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div>
+                  <div class="text-xs text-slate-600 mb-1">Sisa Pokok Piutang Berjalan</div>
+                  <div class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <span x-text="formatRp(stats.total_piutang)"></span>
+                  </div>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500"><i class="ri-exchange-dollar-line"></i></div>
+              </div>
+              <div class="flex justify-between items-center p-3 rounded-lg bg-[rgba(239,68,68,0.05)] border border-[rgba(239,68,68,0.1)]">
+                <div>
+                  <div class="text-xs text-red-600 mb-1">Risiko Kredit (Pinjaman Macet)</div>
+                  <div class="text-lg font-bold text-red-600">
+                    <span x-text="stats.pinjaman_macet"></span> <span class="text-sm font-normal">Rekening</span>
+                  </div>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-500"><i class="ri-alert-line"></i></div>
+              </div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-slate-200">
+              <p class="text-xs text-slate-600 leading-relaxed"><i class="ri-information-line mr-1"></i> Piutang dikelola menggunakan metode bunga flat. Pendapatan bunga diakui secara proporsional sesuai realisasi angsuran, memenuhi prinsip akrual SAK EP.</p>
+            </div>
+          </div>
+
+          <div class="card bg-gradient-to-br from-[var(--dark-2)] to-[#1e293b]">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ri-file-chart-line text-purple-400 mr-2"></i> Laporan Cepat</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <a href="/pages/kasir.html" class="p-4 rounded-xl border border-blue-500/30 bg-blue-600/10 hover:bg-blue-600/20 transition flex flex-col items-center text-center gap-2 group relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-1 bg-blue-600 text-[8px] font-black text-white px-2 rounded-bl-lg">PREMIUM</div>
+                <i class="ri-shopping-cart-2-line text-2xl text-blue-500 group-hover:scale-110 transition-transform"></i>
+                <span class="text-sm font-black text-slate-200">KASIR POS v2.0</span>
+              </a>
+              <a href="/pages/laporan.html?tab=neraca" class="p-4 rounded-xl border border-[var(--border)] bg-white hover:bg-[rgba(16,185,129,0.1)] hover:border-blue-600/50 transition flex flex-col items-center text-center gap-2 group">
+                <i class="ri-scales-3-line text-2xl text-slate-600 group-hover:text-blue-600 font-semibold"></i>
+                <span class="text-sm font-semibold text-slate-600 group-hover:text-slate-800">Neraca</span>
+              </a>
+              <a href="/pages/laporan.html?tab=labarugi" class="p-4 rounded-xl border border-[var(--border)] bg-white hover:bg-[rgba(99,102,241,0.1)] hover:border-indigo-500/50 transition flex flex-col items-center text-center gap-2 group">
+                <i class="ri-line-chart-line text-2xl text-slate-600 group-hover:text-indigo-400"></i>
+                <span class="text-sm font-semibold text-slate-600 group-hover:text-slate-800">Laba Rugi (SHU)</span>
+              </a>
+              <a href="/pages/laporan.html?tab=aruskas" class="p-4 rounded-xl border border-[var(--border)] bg-white hover:bg-[rgba(139,92,246,0.1)] hover:border-violet-500/50 transition flex flex-col items-center text-center gap-2 group">
+                <i class="ri-exchange-funds-line text-2xl text-slate-600 group-hover:text-violet-400"></i>
+                <span class="text-sm font-semibold text-slate-600 group-hover:text-slate-800">Arus Kas</span>
+              </a>
+              <a href="/pages/akuntansi.html?tab=jurnal" class="p-4 rounded-xl border border-[var(--border)] bg-white hover:bg-[rgba(245,158,11,0.1)] hover:border-amber-500/50 transition flex flex-col items-center text-center gap-2 group">
+                <i class="ri-book-3-line text-2xl text-slate-600 group-hover:text-amber-600"></i>
+                <span class="text-sm font-semibold text-slate-600 group-hover:text-slate-800">Buku Jurnal Umum</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</body>
+</html>

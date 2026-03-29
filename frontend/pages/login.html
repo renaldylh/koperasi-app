@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Login - Ukoperasi</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1e40af">
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <link rel="stylesheet" href="/assets/css/login.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <style>
+    :root { --primary: #3b82f6; --font-main: 'Inter', sans-serif; }
+    body { font-family: var(--font-main); }
+    .login-btn { background: var(--primary) !important; }
+    .login-logo-icon { background: var(--primary) !important; }
+  </style>
+</head>
+<body class="login-bg text-slate-800" x-data="loginForm()">
+
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <template x-if="branding.logo_url">
+          <img :src="branding.logo_url" alt="Logo" class="w-10 h-10 object-contain">
+        </template>
+        <template x-if="!branding.logo_url">
+          <i class="ri-leaf-fill"></i>
+        </template>
+      </div>
+      <div>
+        <div class="login-title" x-text="branding.app_name_alias || 'Ukoperasi'"></div>
+        <div class="text-xs text-blue-600 font-semibold tracking-wider" x-text="branding.nama_koperasi"></div>
+      </div>
+    </div>
+    <div class="login-subtitle">Masuk ke sistem pengelolaan keuangan koperasi digital Anda.</div>
+
+    <form @submit.prevent="submit">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <div class="login-input-wrap">
+          <i class="ri-mail-line login-input-icon"></i>
+          <input type="email" x-model="email" required class="login-input" placeholder="admin@ukoperasi.id">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div class="login-input-wrap">
+          <i class="ri-lock-line login-input-icon"></i>
+          <input type="password" x-model="password" required class="login-input" placeholder="••••••••">
+        </div>
+      </div>
+
+      <template x-if="errorMsg">
+        <div class="login-error" x-text="errorMsg"></div>
+      </template>
+
+      <button type="submit" class="login-btn" :disabled="loading">
+        <span x-show="!loading">Masuk ke Sistem</span>
+        <span x-show="loading"><i class="ri-loader-4-line inline-block animate-spin mr-2"></i> Mengautentikasi...</span>
+      </button>
+    </form>
+
+    <div class="login-footer" x-text="branding.app_footer_text || 'Sistem Informasi Koperasi © 2026'"></div>
+  </div>
+
+</body>
+</html>
