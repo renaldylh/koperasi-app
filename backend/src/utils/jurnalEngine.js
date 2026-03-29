@@ -2,7 +2,8 @@
 // JURNAL ENGINE — SAK EP COMPLIANT (IMMUTABLE — JANGAN DIUBAH)
 // ============================================================
 const { JurnalHeader, JurnalDetail, Rekening } = require('../models');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
+const uuidv4 = randomUUID;
 
 /**
  * Validasi double-entry: total debit HARUS = total kredit

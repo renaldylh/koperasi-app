@@ -32,8 +32,7 @@
     "mysql2": "^3.20.0",
     "node-cron": "^4.2.1",
     "pdfkit": "^0.18.0",
-    "sequelize": "^6.37.8",
-    "uuid": "^9.0.1"
+    "sequelize": "^6.37.8"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
